@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Klinkerhandel Produktstation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</body>
+</html>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+/* Layout: helle Arbeitsfläche, schmale weiße Kopfleiste mit rotem Markenstrich. Oben „Datenblatt einlesen“, darunter Schritte | Formular | Vorschau + Checkliste. Nur heller Modus (bewusst). */
+:root{
+  color-scheme:light;
+  --ink:#0b1519;            /* Markenschwarz klinkerhandel.de */
+  --signal:#c8161d;         /* Markenrot */
+  --signal-soft:#fcefef;
+  --clay:#a8452f;
+  --bg:#f5f6f7;
+  --surface:#ffffff;
+  --surface-2:#f9fafb;
+  --line:#e3e6e9;
+  --line-strong:#cfd4d8;
+  --text:#212934;
+  --muted:#636b75;
+  --faint:#8b929a;
+  --ok:#1d7148;--ok-soft:#e8f4ee;
+  --warn:#8f5c00;--warn-soft:#fdf4e3;--warn-dot:#d39a2c;
+  --bad:#b0161b;--bad-soft:#fcecec;
+  --ai:#2f5d8a;--ai-soft:#eaf1f8;--ai-line:#c6d7e8;
+  --serp-link:#1a0dab;--serp-text:#4d5156;
+  --font-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:6px;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--text)}
+body{font-family:var(--font-body);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--surface)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line);box-shadow:inset 0 3px 0 var(--signal)}
+.top-in{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding-block:10px 0;max-width:1440px;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);padding-bottom:10px}
+.brand-mark{width:26px;height:18px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:1.5px}
+.brand-mark i{background:var(--signal)}
+.brand-mark i:nth-child(1){grid-column:1/3}.brand-mark i:nth-child(2){grid-column:3/5}
+.brand-mark i:nth-child(3){grid-column:1/2}.brand-mark i:nth-child(4){grid-column:2/4}.brand-mark i:nth-child(5){grid-column:4/5}
+.brand-mark i:nth-child(6){grid-column:1/3;opacity:.45}.brand-mark i:nth-child(7){grid-column:3/5;opacity:.45}
+.brand-txt b{display:block;font-weight:600;font-size:14px;letter-spacing:.01em;line-height:1.15}
+.brand-txt span{font-size:11px;color:var(--muted)}
+.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap;align-self:flex-end}
+.tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 12px 10px;cursor:pointer;font-size:13px;font-weight:500;display:flex;gap:7px;align-items:center}
+.tab:hover{color:var(--text)}
+.tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--signal)}
+.tab .cnt{font-family:var(--font-mono);font-size:10.5px;background:var(--bg);border:1px solid var(--line);padding:0 6px;border-radius:999px;color:var(--muted)}
+
+main{padding-block:22px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1440px;margin:0 auto}
+.view-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+h1,h2,h3{margin:0;line-height:1.25;text-wrap:balance;color:var(--ink)}
+h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+h2{font-size:15px;font-weight:600}
+h3{font-size:13px;font-weight:600}
+.lead{color:var(--muted);max-width:68ch;margin:4px 0 0}
+.eyebrow{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.hint{font-size:12px;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+
+.intake{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);margin-bottom:18px;overflow:hidden}
+@media (max-width:820px){.intake{grid-template-columns:minmax(0,1fr)}}
+.intake-drop{padding:18px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:10px;background:var(--surface-2)}
+@media (max-width:820px){.intake-drop{border-right:0;border-bottom:1px solid var(--line)}}
+.dz{border:1px dashed var(--line-strong);border-radius:6px;padding:16px;text-align:center;background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:4px;align-items:center;transition:border-color .15s,background .15s}
+.dz:hover{border-color:var(--ai)}
+.dz.over{border-color:var(--ai);background:var(--ai-soft)}
+.dz svg{width:22px;height:22px;color:var(--ai)}
+.dz b{font-weight:600;font-size:13px}
+.intake-body{padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ai-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ai);background:var(--ai-soft);border:1px solid var(--ai-line);padding:2px 7px;border-radius:999px}
+.ai-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:600px){.ai-steps{grid-template-columns:minmax(0,1fr)}}
+.ai-steps li{border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:12.5px;color:var(--muted)}
+.ai-steps li b{display:block;color:var(--text);font-size:12.5px;font-weight:600;margin-bottom:2px}
+.progress{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.pages{display:flex;gap:6px;flex-wrap:wrap}
+.pages img{width:52px;height:72px;object-fit:cover;border:1px solid var(--line);border-radius:3px;background:var(--surface)}
+.spin{width:16px;height:16px;border:2px solid var(--ai-line);border-top-color:var(--ai);border-radius:50%;animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.review-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+.review{width:100%;border-collapse:collapse;font-size:12.5px;min-width:420px}
+.review th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.review td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.review tr:last-child td{border-bottom:0}
+.review td:first-child{width:28px}
+.review td:nth-child(2){color:var(--muted);width:160px}
+.review input{width:15px;height:15px;accent-color:var(--ai);margin:2px 0 0}
+.review .old{color:var(--faint);text-decoration:line-through;margin-right:6px}
+.notes{margin:0;padding-left:18px;color:var(--warn);font-size:12.5px}
+
+.studio{display:grid;grid-template-columns:190px minmax(0,1fr) 320px;gap:18px;align-items:start}
+@media (max-width:1180px){.studio{grid-template-columns:minmax(0,1fr) 300px}.steps{grid-column:1/-1}}
+@media (max-width:860px){.studio{grid-template-columns:minmax(0,1fr)}}
+.steps{position:sticky;top:calc(env(safe-area-inset-top,0px) + 70px);display:flex;flex-direction:column;gap:2px}
+@media (max-width:1180px){.steps{position:static;flex-direction:row;overflow-x:auto;border-bottom:1px solid var(--line)}}
+.step{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:0 6px 6px 0;border:0;background:none;cursor:pointer;text-align:left;color:var(--muted);white-space:nowrap;border-left:2px solid transparent}
+@media (max-width:1180px){.step{border-left:0;border-bottom:2px solid transparent;border-radius:0}}
+.step:hover{color:var(--text)}
+.step[aria-current="step"]{color:var(--ink);border-left-color:var(--signal);background:var(--surface)}
+@media (max-width:1180px){.step[aria-current="step"]{border-bottom-color:var(--signal);background:none}}
+.step .dot{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono);font-size:10.5px;border:1px solid var(--line-strong);flex:none;background:var(--surface)}
+.step.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.step[aria-current="step"] .dot{border-color:var(--signal);color:var(--signal)}
+.step b{display:block;font-weight:500;font-size:13px}
+.step small{font-size:11px;color:var(--faint)}
+
+.form{padding:22px;display:flex;flex-direction:column;gap:22px;min-width:0}
+@media (max-width:600px){.form{padding:16px}}
+.form-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px}
+.tag{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap}
+.tag.example{background:var(--warn-soft);color:var(--warn)}
+.ki{display:inline-flex;align-items:center;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ai);background:var(--ai-soft);border:1px solid var(--ai-line);border-radius:999px;padding:0 6px;line-height:16px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field>label,.field>.lbl{font-weight:500;font-size:12.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--text)}
+.req{color:var(--signal)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:600px){.grid2,.grid3{grid-template-columns:minmax(0,1fr)}}
+input[type=text],input[type=number],select,textarea{width:100%;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);padding:7px 10px;min-height:36px;font-size:13px}
+textarea{min-height:120px;resize:vertical;line-height:1.55}
+input:hover,select:hover,textarea:hover{border-color:#aeb5bb}
+input:focus,select:focus,textarea:focus{border-color:var(--ink);outline:none;box-shadow:0 0 0 3px rgba(11,21,25,.08)}
+input.invalid{border-color:var(--bad);background:var(--bad-soft)}
+input.valid{border-color:var(--ok)}
+.from-ai{border-color:var(--ai-line)!important;background:var(--ai-soft)!important}
+.msg{font-size:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.msg.bad{color:var(--bad)}.msg.ok{color:var(--ok)}.msg.warn{color:var(--warn)}.msg.muted{color:var(--muted)}
+
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.choice{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--r);padding:10px 12px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;transition:border-color .15s}
+.choice:hover{border-color:#9ea6ac}
+.choice[aria-pressed="true"]{border-color:var(--signal);box-shadow:inset 0 0 0 1px var(--signal);background:var(--signal-soft)}
+.choice b{font-size:13px;font-weight:600}
+.choice small{color:var(--muted);font-size:11.5px;line-height:1.35}
+.choice svg{width:72px;height:22px;margin-bottom:3px}
+
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
+.sw{border:1px solid var(--line);border-radius:var(--r);padding:5px 7px;background:var(--surface);cursor:pointer;display:flex;align-items:center;gap:7px;font-size:12px;text-align:left}
+.sw .chip{width:22px;height:16px;border-radius:2px;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.sw:hover{border-color:var(--line-strong)}
+.sw[aria-pressed="true"]{border-color:var(--signal);box-shadow:inset 0 0 0 1px var(--signal);font-weight:600}
+.sw .ord{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--signal)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pill{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--r);padding:5px 10px;cursor:pointer;font-size:12.5px;display:flex;gap:6px;align-items:baseline}
+.pill:hover{border-color:#9ea6ac}
+.pill[aria-pressed="true"]{border-color:var(--signal);box-shadow:inset 0 0 0 1px var(--signal);background:var(--signal-soft)}
+.pill small{font-family:var(--font-mono);font-size:10.5px;color:var(--muted)}
+.pill.static{cursor:default}
+
+.calc{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:14px;background:var(--surface-2)}
+@media (max-width:600px){.calc{grid-template-columns:minmax(0,1fr)}}
+.wall{width:180px;height:110px;border-radius:4px;max-width:100%}
+.calc-num{font-size:24px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.calc-num small{font-size:12px;font-weight:400;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--signal)}
+
+.drop{border:1px dashed var(--line-strong);border-radius:8px;padding:18px;text-align:center;background:var(--surface-2);cursor:pointer;display:block}
+.drop:hover,.drop.over{border-color:var(--signal);background:var(--signal-soft)}
+.drop b{display:block;font-size:13px;font-weight:600}
+.imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.img{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);display:flex;flex-direction:column}
+.img .ph{aspect-ratio:4/3;background:var(--surface-2) center/cover no-repeat;position:relative;max-width:100%}
+.img .ph .no{position:absolute;top:6px;left:6px;background:var(--surface);color:var(--ink);font-family:var(--font-mono);font-size:10.5px;padding:1px 6px;border-radius:3px}
+.img .ph .lowres{position:absolute;bottom:6px;left:6px;right:6px;background:var(--warn-soft);color:var(--warn);font-size:11px;padding:2px 6px;border-radius:3px}
+.img .meta{padding:9px;display:flex;flex-direction:column;gap:6px}
+.img select{min-height:32px;padding:4px 8px;font-size:12.5px}
+.img .fn{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);word-break:break-all}
+.img .acts{display:flex;gap:5px}
+.icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:5px;min-width:30px;height:28px;cursor:pointer;font-size:12px;padding:0 8px;color:var(--muted)}
+.icon-btn:hover:not(:disabled){border-color:var(--ink);color:var(--ink)}
+.icon-btn:disabled{opacity:.4}
+
+.serp{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:var(--surface);display:flex;flex-direction:column;gap:2px;font-family:Arial,sans-serif}
+.serp .u{font-size:12px;color:var(--serp-text)}
+.serp .t{color:var(--serp-link);font-size:18px;line-height:1.3}
+.serp .d{font-size:13px;color:var(--serp-text)}
+.meter{height:3px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:4px}
+.meter i{display:block;height:100%;background:var(--ok)}
+.meter.over i{background:var(--bad)}
+.toggle{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);cursor:pointer}
+.toggle input{width:16px;height:16px;accent-color:var(--signal);margin-top:2px;flex:none}
+.toggle b{font-weight:600}
+
+.nav{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px}
+.btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--r);padding:7px 14px;cursor:pointer;font-weight:500;font-size:13px;min-height:36px;display:inline-flex;gap:7px;align-items:center;justify-content:center}
+.btn:hover:not(:disabled){border-color:var(--ink)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.primary:hover:not(:disabled){background:#22323a}
+.btn.red{background:var(--signal);border-color:var(--signal);color:#fff}
+.btn.ai{background:var(--ai);border-color:var(--ai);color:#fff}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.link-btn{background:none;border:0;color:var(--signal);font-weight:500;cursor:pointer;padding:0;font-size:12.5px;text-decoration:underline;text-underline-offset:2px}
+
+.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 70px);display:flex;flex-direction:column;gap:14px}
+@media (max-width:860px){.side{position:static}}
+.preview{overflow:hidden}
+.pv-img{aspect-ratio:4/3;background:var(--surface-2) center/cover no-repeat;display:grid;place-items:center;color:var(--faint);font-size:12px;max-width:100%;border-bottom:1px solid var(--line)}
+.pv-body{padding:14px;display:flex;flex-direction:column;gap:6px}
+.pv-title{font-weight:600;font-size:14px;line-height:1.35;color:var(--ink)}
+.pv-dots{display:flex;gap:4px;flex-wrap:wrap}
+.pv-dots i{width:12px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+.pv-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;border-top:1px solid var(--line);padding-top:6px}
+.pv-row span:first-child{color:var(--muted)}
+.pv-link{font-size:12px;color:var(--signal);font-weight:500}
+.check{padding:14px;display:flex;flex-direction:column;gap:10px}
+.check-head{display:flex;align-items:center;gap:12px}
+.ring{width:48px;height:48px;flex:none}
+.ring text{font-family:var(--font-mono);font-size:12px;font-weight:500;fill:var(--text)}
+.check ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.check li button{width:100%;display:flex;align-items:center;gap:9px;background:none;border:0;padding:5px 4px;border-radius:4px;cursor:pointer;text-align:left;font-size:12.5px}
+.check li button:hover{background:var(--surface-2)}
+.lamp{width:7px;height:7px;border-radius:50%;flex:none}
+.lamp.ok{background:var(--ok)}.lamp.bad{background:var(--bad)}.lamp.warn{background:var(--warn-dot)}
+.check li .t2{margin-left:auto;font-size:10.5px;color:var(--faint)}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input{max-width:260px}
+.seg{display:flex;border:1px solid var(--line-strong);border-radius:var(--r);overflow:hidden;background:var(--surface);flex-wrap:wrap}
+.seg button{border:0;background:none;padding:6px 12px;cursor:pointer;font-size:12.5px;color:var(--muted);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table.data{border-collapse:collapse;width:100%;min-width:900px;font-size:12.5px}
+.data th,.data td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.data th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;background:var(--surface-2)}
+.data tr:last-child td{border-bottom:0}
+.data tbody tr:hover{background:var(--surface-2)}
+.data tbody tr.sel{background:var(--signal-soft)}
+.data input[type=checkbox]{width:15px;height:15px;accent-color:var(--signal)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:1px 8px;border-radius:999px;font-weight:500;white-space:nowrap;border:1px solid transparent}
+.badge.new{background:var(--ok-soft);color:var(--ok)}
+.badge.upd{background:var(--warn-soft);color:var(--warn)}
+.badge.old{color:var(--muted);border-color:var(--line)}
+.badge.miss{background:var(--bad-soft);color:var(--bad)}
+.changed{box-shadow:inset 0 -2px 0 var(--warn-dot)}
+.bar{width:70px;height:4px;border-radius:4px;background:var(--line);overflow:hidden;display:inline-block;vertical-align:middle}
+.bar i{display:block;height:100%}
+.bulk{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));margin-top:12px;background:var(--surface);border:1px solid var(--line-strong);border-left:3px solid var(--signal);border-radius:8px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;box-shadow:0 10px 30px rgba(11,21,25,.12)}
+.bulk b{font-size:13px;font-weight:600;margin-right:4px}
+.bulk select{width:auto;max-width:100%}
+
+.exp{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.exp{grid-template-columns:minmax(0,1fr)}}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.stat{padding:10px;text-align:center;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat b{display:block;font-size:20px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--muted)}
+.code{background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:16px;font-family:var(--font-mono);font-size:11.5px;line-height:1.65;overflow:auto;max-height:640px;white-space:pre;margin:0}
+.code .k{color:#8a2a2e}.code .s{color:var(--ok)}.code .n{color:var(--warn)}.code .b{color:var(--ai)}
+.flow{display:flex;flex-direction:column;gap:8px;font-size:12.5px;margin:0;padding:0;list-style:none;counter-reset:f}
+.flow li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
+.flow li::before{counter-increment:f;content:counter(f);width:18px;height:18px;border-radius:50%;border:1px solid var(--line-strong);display:grid;place-items:center;font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);opacity:0;background:var(--ink);color:#fff;padding:9px 14px;border-radius:6px;font-size:12.5px;transition:.2s;z-index:50;pointer-events:none;max-width:calc(100% - 32px)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+html{-webkit-text-size-adjust:100%}body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#erfassen" aria-label="Klinkerhandel Produktstation">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="brand-txt"><b>Klinkerhandel Harbecke</b><span>Produktstation</span></span>
+    </a>
+    <nav class="tabs" aria-label="Bereiche">
+      <button class="tab" data-view="erfassen">Erfassen</button>
+      <button class="tab" data-view="sortiment">Sortiment <span class="cnt" id="cntSort">0</span></button>
+      <button class="tab" data-view="export">Export <span class="cnt" id="cntExp">0</span></button>
+    </nav>
+  </div>
+</header>
+
+<main id="app"></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ---------- Stammdaten (aus dem Live-Shop abgeleitet) ---------- */
+const TYPEN={
+  verblender:{label:"Verblender",kurz:"Verblender",desc:"Vollstein für die Vormauerschale"},
+  riemchen:{label:"Riemchen",kurz:"Riemchen",desc:"Klinkerscheibe für Sanierung und WDVS"},
+  beides:{label:"Verblender + Riemchen",kurz:"Verblender",desc:"Legt zwei verknüpfte Produkte an"},
+  daemmklinker:{label:"Dämmklinker",kurz:"Dämmklinker",desc:"Riemchen auf Dämmplatte"}
+};
+const HERSTELLUNG={
+  handform:{label:"Handform",desc:"Unregelmäßige Kanten, lebendige Oberfläche"},
+  strangpress:{label:"Strangpress",desc:"Exakte Maße, klare Kanten"},
+  wasserstrich:{label:"Wasserstrich",desc:"Weiche Kanten, typische Schlieren"}
+};
+const HERSTELLER=["ABC Klinker","Deppe Klinker","Engels Baksteen","Feldhaus Klinker","Hagemann Nistklinker","Hagemeister","Iking Klinker","MBI Beton Klinker","Nelissen Klinker","Vandersanden","Wienerberger"];
+const FARBEN={
+  rot:"#a8402e",rotbunt:"linear-gradient(90deg,#8f3424,#c4693c 50%,#7a2f22)",braun:"#6e4632",bordeaux:"#6b2230",orange:"#c4692f",
+  gelb:"#d4b05a",beige:"#cbb08c",creme:"#e4d9bf","weiß":"#ecebe6",grau:"#8d8e8a",blau:"#4b5866",schwarz:"#2a2826",
+  violett:"#5b4256",rose:"#c98f86",nuanciert:"conic-gradient(#a8402e,#cbb08c,#8d8e8a,#6e4632,#a8402e)"
+};
+const FORMATE=[
+  {k:"WF",n:"Waalformat",m:[210,100,50]},{k:"WDF",n:"Waaldickformat",m:[210,100,65]},
+  {k:"NF",n:"Normalformat",m:[240,115,71]},{k:"DF",n:"Dünnformat",m:[240,115,52]},
+  {k:"2DF",n:"Doppeltes Dünnformat",m:[240,115,113]},{k:"RF",n:"Reichsformat",m:[250,120,65]},
+  {k:"LDF",n:"Langes Dünnformat",m:null},{k:"XLDF",n:"Extra langes DF",m:null},{k:"ModF",n:"Modulformat",m:null},
+  {k:"LF",n:"Langformat",m:null},{k:"BDF",n:"Bundesdünnformat",m:null},{k:"Modul",n:"Modul",m:null}
+];
+const OBERFL=["glatt","besandet","genarbt","gerumpelt","geschnitten","geflammt"];
+const FROST={"":"– bitte wählen –","F2":"F2 – voll frostbeständig","F1":"F1 – mäßig","F0":"F0 – nur geschützt"};
+const ROLLEN={freisteller:"Freisteller (Einzelstein)",wand:"Wandfläche",detail:"Detail / Nahaufnahme",referenz:"Objektfoto"};
+const STEPS=[{t:"Stein",s:"Typ, Nummer, Hersteller"},{t:"Optik",s:"Farbe, Format, Oberfläche"},{t:"Technik",s:"Maße, Werte, Bedarf"},{t:"Bilder",s:"Upload, Reihenfolge"},{t:"Prüfen",s:"Texte, SEO, Übernahme"}];
+const FIELD_LABEL={bezeichnung:"Bezeichnung",artikel_hersteller:"Artikelnr. Hersteller",hersteller:"Hersteller",typ:"Produkttyp",herstellung:"Herstellungsart",
+  farben:"Farben",formate:"Formate",oberflaeche:"Oberfläche","technik.l":"Länge (mm)","technik.b":"Breite (mm)","technik.h":"Höhe (mm)",
+  "technik.gewicht":"Gewicht (kg/Stk.)","technik.druck":"Druckfestigkeit (N/mm²)","technik.wasser":"Wasseraufnahme (%)","technik.frost":"Frostwiderstand",
+  "technik.bedarf":"Bedarf (Stk./m²)","technik.staerke":"Riemchenstärke (mm)",herstellertext:"Herstellertext"};
+
+/* ---------- Beispielbilder (Canvas) ---------- */
+function brickImage(base,mode){
+  const c=document.createElement("canvas");c.width=800;c.height=600;const x=c.getContext("2d");
+  let seed=base.length*7+mode.length;const rnd=()=>{seed=Math.sin(seed)*10000;return seed-Math.floor(seed)};
+  const tone=(hex,v)=>{const n=parseInt(hex.slice(1),16);const cl=q=>Math.max(0,Math.min(255,q|0));return `rgb(${cl((n>>16)+v)},${cl(((n>>8)&255)+v)},${cl((n&255)+v)})`};
+  const pal=base.split(",");
+  if(mode==="freisteller"){
+    x.fillStyle="#f4f4f2";x.fillRect(0,0,800,600);
+    x.fillStyle="rgba(0,0,0,.10)";x.beginPath();x.ellipse(400,420,250,24,0,0,7);x.fill();
+    x.fillStyle=pal[0];x.fillRect(150,250,500,160);
+    for(let i=0;i<1400;i++){x.fillStyle=tone(pal[i%pal.length],(rnd()-.5)*60);x.globalAlpha=.35;x.fillRect(150+rnd()*500,250+rnd()*160,3+rnd()*6,2+rnd()*4)}
+    x.globalAlpha=1;return c.toDataURL("image/jpeg",.82);
+  }
+  const bh=mode==="detail"?70:34,bw=mode==="detail"?300:150,j=mode==="detail"?14:7;
+  x.fillStyle="#bdb8ae";x.fillRect(0,0,800,600);
+  for(let row=0,y=0;y<600;row++,y+=bh+j){const off=row%2?-(bw+j)/2:0;
+    for(let xx=off;xx<800;xx+=bw+j){x.fillStyle=tone(pal[Math.floor(rnd()*pal.length)],(rnd()-.5)*40);x.fillRect(xx,y,bw,bh);
+      for(let k=0;k<20;k++){x.fillStyle=`rgba(0,0,0,${rnd()*.12})`;x.fillRect(xx+rnd()*bw,y+rnd()*bh,2+rnd()*8,1+rnd()*3)}}}
+  return c.toDataURL("image/jpeg",.82);
+}
+
+/* ---------- Zustand ---------- */
+let uid=1;
+function emptyDraft(){return {id:"d"+(uid++),beispiel:false,typ:"",sku:"",bezeichnung:"",artikel_hersteller:"",hersteller:"",herstellung:"",farben:[],formate:[],oberflaeche:[],
+  technik:{l:"",b:"",h:"",gewicht:"",druck:"",wasser:"",frost:"",staerke:"",ecken:false,fuge:10,bedarf:""},
+  bilder:[],herstellertext:"",claudeText:true,editSku:null,keep:null,ki:new Set(),datenblatt:null};}
+function exampleDraft(){
+  const d=emptyDraft();Object.assign(d,{beispiel:true,typ:"beides",sku:"HBR 12-201",bezeichnung:"Beispielstein „Rhede Kohlebrand“",hersteller:"Engels Baksteen",
+    herstellung:"handform",farben:["rotbunt","braun"],formate:["WDF"],oberflaeche:["besandet"],
+    herstellertext:"Beispieltext: Handgeformter Verblender aus niederländischem Flussklei, im Ringofen gebrannt. Die besandete Oberfläche und die leicht unregelmäßigen Kanten ergeben ein warmes, lebendiges Fassadenbild in Rot- und Brauntönen. Geeignet für Neubau und Ergänzung im Bestand."});
+  Object.assign(d.technik,{l:"210",b:"100",h:"65",gewicht:"2,1",frost:"F2",staerke:"20",ecken:true,fuge:10});
+  const pal="#8f3424,#b0522f,#6e4632,#9c3d2a";
+  d.bilder=[["freisteller","freisteller"],["wand","wand"],["detail","detail"]].map(([r,m],i)=>({id:"i"+i,src:brickImage(pal,m),rolle:r,w:800,h:600,orig:"beispiel-"+(i+1)+".jpg"}));
+  return d;
+}
+function product(sku,typ,herst,herstellung,farben,formate,extra={}){
+  return Object.assign({sku,typ,hersteller:herst,herstellung,farben,formate,bilderAnzahl:0,hatFreisteller:false,technik:{},herstellertext:"",quelle:"bestand",aktion:"keine",geaendert:[]},extra);
+}
+const state={view:"erfassen",step:0,draft:exampleDraft(),
+  products:[
+    product("HBR 11-105","verblender","Vandersanden","handform",["nuanciert","weiß","grau"],["WDF","WF"],{bilderAnzahl:7,hatFreisteller:true}),
+    product("HBR 11-105 R","riemchen","Vandersanden","handform",["nuanciert","weiß","grau"],["WDF","WF"],{bilderAnzahl:7,hatFreisteller:true}),
+    product("HBR 11-112","verblender","","handform",[],[],{bilderAnzahl:7}),
+    product("HBR 11-119","verblender","","handform",[],[],{bilderAnzahl:7}),
+    product("HBR 10-105","verblender","","handform",[],[],{bilderAnzahl:5}),
+    product("HBR 11-114","verblender","","handform",[],[],{bilderAnzahl:6}),
+    product("HBR 11-116","verblender","","handform",[],[],{bilderAnzahl:8})],
+  sel:new Set(),filter:"alle",q:""};
+const intake={status:"idle",file:"",pages:[],result:null,accept:{},msg:"",ctl:null,ready:false,sampler:null,imgLimits:null,demo:false};
+
+/* ---------- Hilfen ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const slug=s=>String(s).toLowerCase().replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const num=v=>parseFloat(String(v).replace(",","."));
+function toast(t){const el=$("#toast");el.textContent=t;el.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("on"),2600)}
+const SKU_RE=/^[A-Z]{2,4} \d{2}-\d{3}$/;
+function skuState(d){
+  const s=d.sku.trim();
+  if(!s) return {ok:false,msg:"Artikelnummer fehlt",cls:"bad"};
+  if(!SKU_RE.test(s)) return {ok:false,msg:"Format: Kürzel, Leerzeichen, 2 Ziffern, Bindestrich, 3 Ziffern (z. B. HBR 11-105)",cls:"bad"};
+  const dup=state.products.find(p=>p.sku===s||p.sku===s+" R");
+  if(dup&&!d.editSku) return {ok:false,msg:`${dup.sku} gibt es schon im Shop.`,cls:"bad",dup:dup.sku};
+  return {ok:true,msg:d.editSku?"Bestehendes Produkt wird aktualisiert":"Nummer ist frei",cls:"ok"};
+}
+function skus(d){const s=d.sku.trim();return d.typ==="beides"?[s,s+" R"]:d.typ==="riemchen"?[s+" R"]:[s];}
+function bedarf(d){const l=num(d.technik.l),h=num(d.technik.h),f=num(d.technik.fuge)||10;return l&&h?1e6/((l+f)*(h+f)):null;}
+function checks(d){
+  const t=d.technik,frei=d.bilder.some(b=>b.rolle==="freisteller")||!!d.keep?.frei,nB=d.bilder.length+(d.keep?.anzahl||0);
+  return [
+    {l:"Produkttyp gewählt",ok:!!d.typ,req:true,step:0},
+    {l:"Artikelnummer gültig und frei",ok:skuState(d).ok,req:true,step:0},
+    {l:"Hersteller",ok:!!d.hersteller,req:true,step:0},
+    {l:"Herstellungsart",ok:!!d.herstellung,req:true,step:0},
+    {l:"Mindestens eine Farbe",ok:d.farben.length>0,req:true,step:1},
+    {l:"Mindestens ein Format",ok:d.formate.length>0,req:true,step:1},
+    {l:"Maße L × B × H",ok:!!(num(t.l)&&num(t.b)&&num(t.h)),req:true,step:2},
+    {l:"Frostwiderstand",ok:!!t.frost,req:false,step:2},
+    {l:"Druckfestigkeit und Wasseraufnahme",ok:!!(t.druck&&t.wasser),req:false,step:2},
+    {l:"Freisteller-Bild",ok:frei,req:true,step:3},
+    {l:"Mindestens 3 Bilder",ok:nB>=3,req:false,step:3},
+    {l:"Herstellertext ab 150 Zeichen",ok:d.herstellertext.trim().length>=150,req:false,step:4}];
+}
+function score(d){const c=checks(d);const w=c.reduce((a,x)=>a+(x.req?2:1),0);return Math.round(c.reduce((a,x)=>a+(x.ok?(x.req?2:1):0),0)/w*100);}
+function stepDone(d,i){const c=checks(d);return i===4?c.filter(x=>x.req).every(x=>x.ok):c.filter(x=>x.step===i&&x.req).every(x=>x.ok);}
+function typKurz(d){return d.typ==="riemchen"?"Riemchen":d.typ==="daemmklinker"?"Dämmklinker":"Verblender";}
+function produktName(d,riem){
+  const art=HERSTELLUNG[d.herstellung]?.label||"…",sku=d.sku.trim()||"…";
+  if(d.typ==="daemmklinker") return `Dämmklinker – ${sku} – ${art}`;
+  return riem?`Riemchen / Verblender – ${sku} R – ${art} Klinkerriemchen`:`Klinker / Verblender – ${sku} – ${art} Klinkerstein`;
+}
+function seoTitel(d){const art=HERSTELLUNG[d.herstellung]?.label||"",f=d.farben.slice(0,2).join(" & ");
+  return `${art?art+"-":""}${typKurz(d)} ${d.sku.trim()||"…"}${f?" in "+f:""} | Klinkerhandel Rhede`;}
+function metaText(d){const art=HERSTELLUNG[d.herstellung]?.label||"";
+  return `${typKurz(d)} ${d.sku.trim()} ${d.hersteller?"von "+d.hersteller:""}: ${art}${d.farben.length?", "+d.farben.join(", "):""}${d.formate.length?", Format "+d.formate.join("/"):""}. Muster ansehen und beraten lassen in unserer Ausstellung in Rhede.`.replace(/\s+/g," ");}
+function dateiname(d,i){return `${slug(d.sku||"neu")}-${slug(typKurz(d))}-${slug(d.herstellung||"klinker")}-${String(i+1).padStart(2,"0")}.webp`;}
+function altText(d,b){return `${typKurz(d)} ${d.sku.trim()} ${HERSTELLUNG[d.herstellung]?.label||""}${d.farben.length?" in "+d.farben.join(", "):""} – ${ROLLEN[b.rolle]||""}`.replace(/\s+/g," ").trim();}
+const kiTag=k=>state.draft.ki.has(k)?' <span class="ki" title="Aus dem Datenblatt übernommen">Datenblatt</span>':"";
+const kiCls=k=>state.draft.ki.has(k)?"from-ai":"";
+
+/* ---------- Ansichten ---------- */
+function render(){
+  document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-current",t.dataset.view===state.view?"page":"false"));
+  $("#cntSort").textContent=state.products.length;
+  $("#cntExp").textContent=state.products.filter(p=>p.aktion!=="keine").length;
+  const app=$("#app");
+  if(state.view==="erfassen"){app.innerHTML=viewErfassen();renderIntake();updateSide();bindForm();}
+  if(state.view==="sortiment") app.innerHTML=viewSortiment();
+  if(state.view==="export") app.innerHTML=viewExport();
+}
+function viewErfassen(){
+  const d=state.draft;
+  return `<div class="view-head"><div><div class="eyebrow">${d.editSku?"Produkt bearbeiten":"Neues Produkt"}</div>
+      <h1>${d.editSku?esc(d.editSku):"Produkt erfassen"}</h1>
+      <p class="lead">Datenblatt einlesen lassen oder Werte von Hand eintragen. Rechts siehst du, wie das Produkt im Shop erscheint und was noch fehlt.</p></div>
+    <button class="btn" data-act="newDraft">Leeres Formular</button></div>
+  <section class="panel intake" id="intake" aria-label="Datenblatt einlesen"></section>
+  <div class="studio">
+    <nav class="steps" aria-label="Schritte">${STEPS.map((s,i)=>{const done=stepDone(d,i)&&i!==state.step;return `<button class="step ${done?"done":""}" data-step="${i}" ${i===state.step?'aria-current="step"':""}>
+      <span class="dot">${done?"✓":i+1}</span><span><b>${s.t}</b><small>${s.s}</small></span></button>`}).join("")}</nav>
+    <section class="panel form" id="form">${stepBody(d)}</section>
+    <aside class="side" id="side"></aside></div>`;
+}
+
+/* ---- Datenblatt-Bereich ---- */
+function renderIntake(){
+  const el=$("#intake");if(!el) return;
+  const canAI=!!intake.sampler,canImg=!!intake.imgLimits;
+  const left=`<div class="intake-drop">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2>Datenblatt einlesen</h2><span class="ai-chip">KI</span></div>
+    <label class="dz" id="dz" for="f-sheet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      <b>PDF oder Foto hier ablegen</b><span class="hint">oder klicken zum Auswählen</span></label>
+    <input type="file" id="f-sheet" accept="application/pdf,image/jpeg,image/png,image/webp" hidden>
+    <span class="hint">${!intake.ready?"Verbindung zur KI wird geprüft …":canAI?(canImg?"Liest Text und Tabellen aus PDF-Datenblättern und Fotos.":"Liest Text aus PDFs. Fotos gehen in dieser Ansicht nicht."):"Präsentationsversion: Die Datei wird geladen, das Auslesen ist simuliert. In der Live-Version liest Claude das Datenblatt aus."}</span>
+  </div>`;
+  let right="";
+  if(intake.status==="idle"){
+    right=`<ol class="ai-steps">
+      <li><b>Hochladen</b>Datenblatt vom Hersteller als PDF oder Foto.</li>
+      <li><b>Auslesen</b>Die KI erkennt Hersteller, Farben, Formate, Maße und technische Werte.</li>
+      <li><b>Bestätigen</b>Du prüfst jeden Wert und übernimmst ihn ins Formular.</li></ol>
+      <div class="msg muted">Die Artikelnummer (HBR-Code) vergibst du weiterhin selbst. Werte, die nicht im Datenblatt stehen, bleiben leer.
+      ${!canAI&&intake.ready?`<button class="link-btn" data-act="demoIntake">Beispielergebnis ohne Datei ansehen</button>`:""}</div>`;
+  }
+  if(intake.status==="reading"||intake.status==="thinking"){
+    right=`<div class="progress"><span class="spin" aria-hidden="true"></span><div><b>${intake.status==="reading"?"Datenblatt wird vorbereitet":"KI liest das Datenblatt"}</b>
+      <div class="hint">${esc(intake.file)} · ${intake.status==="reading"?"Seiten werden gerendert":"dauert meist 20 bis 60 Sekunden"}</div></div>
+      ${intake.status==="thinking"&&intake.sampler?`<button class="btn ghost" data-act="stopIntake" style="margin-left:auto">Abbrechen</button>`:""}</div>
+      ${intake.pages.length?`<div class="pages">${intake.pages.map(p=>`<img src="${p}" alt="">`).join("")}</div>`:""}`;
+  }
+  if(intake.status==="error"){
+    right=`<div class="msg bad"><b>Auslesen nicht möglich.</b> ${esc(intake.msg)}</div>
+      <div><button class="btn" data-act="resetIntake">Anderes Datenblatt wählen</button></div>`;
+  }
+  if(intake.status==="review"){
+    const rows=reviewRows(),n=rows.filter(r=>intake.accept[r.k]&&!r.blocked).length;
+    right=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><h3>${rows.length} Werte gefunden ${intake.demo?'<span class="tag example">Beispielergebnis</span>':""}</h3><div class="hint">${esc(intake.file)}. Abwählen, was nicht stimmt.</div></div>
+        ${intake.pages.length?`<div class="pages">${intake.pages.slice(0,4).map(p=>`<img src="${p}" alt="">`).join("")}</div>`:""}</div>
+      ${rows.length?`<div class="review-wrap"><table class="review"><thead><tr><th></th><th>Feld</th><th>Wert aus Datenblatt</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td><input type="checkbox" data-accept="${r.k}" ${intake.accept[r.k]&&!r.blocked?"checked":""} ${r.blocked?"disabled":""} aria-label="${esc(FIELD_LABEL[r.k])} übernehmen"></td>
+        <td>${esc(FIELD_LABEL[r.k]||r.k)}</td><td>${r.old?`<span class="old">${esc(r.old)}</span>`:""}${esc(r.show)}${r.note?`<div class="msg warn">${esc(r.note)}</div>`:""}</td></tr>`).join("")}
+      </tbody></table></div>`:'<div class="msg warn">Im Datenblatt wurden keine verwertbaren Produktdaten gefunden.</div>'}
+      ${intake.result.hinweise?.length?`<div><div class="eyebrow" style="margin-bottom:4px">Hinweise der KI</div><ul class="notes">${intake.result.hinweise.map(h=>`<li>${esc(h)}</li>`).join("")}</ul></div>`:""}
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ai" data-act="applyIntake" ${n?"":"disabled"}>${n} Werte übernehmen</button>
+        <button class="btn ghost" data-act="resetIntake">Verwerfen</button></div>`;
+  }
+  el.innerHTML=left+`<div class="intake-body" aria-live="polite">${right}</div>`;
+  const dz=$("#dz"),fi=$("#f-sheet");
+  ["dragenter","dragover"].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add("over")}));
+  ["dragleave","drop"].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove("over")}));
+  dz.addEventListener("drop",ev=>{const f=ev.dataTransfer.files[0];if(f) readSheet(f);});
+  fi.addEventListener("change",()=>{if(fi.files[0]) readSheet(fi.files[0]);});
+}
+function fmtVal(k,v){if(Array.isArray(v)) return v.join(", ");if(k==="typ") return TYPEN[v]?.label||v;if(k==="herstellung") return HERSTELLUNG[v]?.label||v;if(k==="technik.frost") return FROST[v]||v;
+  if(k==="herstellertext") return v.length>180?v.slice(0,180)+" …":v;return String(v);}
+function getPath(o,p){return p.split(".").reduce((a,k)=>a?.[k],o);}
+function reviewRows(){
+  const r=intake.result,rows=[],d=state.draft;
+  for(const k of Object.keys(FIELD_LABEL)){
+    const v=getPath(r,k);if(v==null||v===""||(Array.isArray(v)&&!v.length)) continue;
+    const cur=getPath(d,k),curEmpty=cur==null||cur===""||(Array.isArray(cur)&&!cur.length);
+    const row={k,v,show:fmtVal(k,v),old:!curEmpty&&k!=="herstellertext"&&fmtVal(k,cur)!==fmtVal(k,v)?fmtVal(k,cur):""};
+    if(k==="hersteller"&&!HERSTELLER.includes(v)){row.blocked=true;row.note="Nicht in der Herstellerliste. Bitte im Shop als Marke anlegen.";}
+    rows.push(row);
+  }
+  return rows;
+}
+function normalize(raw){
+  const o={technik:{}},s=v=>v==null?null:(String(v).trim()||null);
+  o.bezeichnung=s(raw.bezeichnung);o.artikel_hersteller=s(raw.artikelnummer_hersteller);
+  const h=s(raw.hersteller);
+  o.hersteller=h?(HERSTELLER.find(x=>x.toLowerCase()===h.toLowerCase())||HERSTELLER.find(x=>x.toLowerCase().split(" ")[0]===h.toLowerCase().split(" ")[0])||h):null;
+  o.typ=TYPEN[raw.produkttyp]?raw.produkttyp:null;
+  o.herstellung=HERSTELLUNG[raw.herstellung]?raw.herstellung:null;
+  const arr=(v,allowed)=>Array.isArray(v)?[...new Set(v.map(x=>String(x).trim()).filter(x=>allowed.includes(x)))]:[];
+  o.farben=arr(raw.farben,Object.keys(FARBEN));o.formate=arr(raw.formate,FORMATE.map(f=>f.k));o.oberflaeche=arr(raw.oberflaeche,OBERFL);
+  const t=raw.technik||{};["l","b","h","gewicht","druck","wasser","bedarf","staerke"].forEach(k=>{const v=s(t[k]);o.technik[k]=v?(v.replace(/[^\d,.\-–]/g,"")||null):null;});
+  o.technik.frost=["F0","F1","F2"].includes(s(t.frost))?s(t.frost):null;
+  o.herstellertext=s(raw.herstellertext);
+  o.hinweise=Array.isArray(raw.hinweise)?raw.hinweise.map(String).slice(0,4):[];
+  return o;
+}
+function buildPrompt(text){
+  return `Du liest ein Produktdatenblatt eines Klinkerherstellers aus (Verblender, Klinkerriemchen oder Dämmklinker). Die Daten werden in einen Onlinekatalog übernommen.
+
+Antworte nur mit einem JSON-Objekt in genau dieser Form:
+{"bezeichnung":string|null,"artikelnummer_hersteller":string|null,"hersteller":string|null,"produkttyp":"verblender"|"riemchen"|"beides"|"daemmklinker"|null,"herstellung":"handform"|"strangpress"|"wasserstrich"|null,"farben":[],"formate":[],"oberflaeche":[],"technik":{"l":string|null,"b":string|null,"h":string|null,"gewicht":string|null,"druck":string|null,"wasser":string|null,"frost":"F0"|"F1"|"F2"|null,"bedarf":string|null,"staerke":string|null},"herstellertext":string|null,"hinweise":[]}
+
+Regeln:
+- Übernimm nur, was im Datenblatt steht. Nichts schätzen oder ergänzen. Fehlt ein Wert, setze null bzw. eine leere Liste.
+- hersteller: möglichst einer aus dieser Liste, sonst der Name wie im Blatt: ${HERSTELLER.join(", ")}.
+- produkttyp "beides", wenn das Blatt denselben Stein ausdrücklich als Vollstein und als Riemchen anbietet.
+- farben: nur Werte aus ${Object.keys(FARBEN).join(", ")}. Ordne die Farbbeschreibung des Herstellers sinngemäß zu, Hauptfarbe zuerst. "nuanciert" bei deutlich wechselnden Tönen.
+- formate: nur Kürzel aus ${FORMATE.map(f=>f.k).join(", ")}.
+- oberflaeche: nur Werte aus ${OBERFL.join(", ")}.
+- technik: Zahlen als Zeichenkette ohne Einheit, Dezimalkomma wie im Blatt. l, b, h in mm vom ersten genannten Format. gewicht in kg je Stein, druck in N/mm² (Mittelwert, falls genannt), wasser in Prozent, bedarf in Stück je m² laut Hersteller, staerke = Riemchenstärke in mm. frost als Kategorie nach EN 771-1.
+- herstellertext: die beschreibende Produktbeschreibung aus dem Blatt, wortgetreu, höchstens 800 Zeichen.
+- hinweise: bis zu 4 kurze Sätze auf Deutsch zu Unklarheiten, z. B. mehrere Formate mit verschiedenen Maßen oder widersprüchliche Angaben.
+${text?`\nExtrahierter Text des Datenblatts (Tabellen können ungeordnet sein, die beigefügten Seitenbilder zeigen das Layout):\n"""\n${text.slice(0,40000)}\n"""`:"\nDas Datenblatt liegt als Bild bei."}`;
+}
+async function pdfToPages(file){
+  if(!window.pdfjsLib) throw {code:"pdf",message:"Der PDF-Leser konnte nicht geladen werden. Lade das Datenblatt als Foto hoch."};
+  try{pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}catch(e){}
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
+  let text="";const maxImg=Math.min(intake.imgLimits?.maxCount||0,4),blobs=[];
+  for(let i=1;i<=Math.min(pdf.numPages,8);i++){
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();text+=`\n--- Seite ${i} ---\n`+tc.items.map(it=>it.str+(it.hasEOL?"\n":" ")).join("");
+    if(i<=Math.max(maxImg,2)){
+      const v0=page.getViewport({scale:1}),v=page.getViewport({scale:Math.min(2,1500/v0.width)});
+      const c=document.createElement("canvas");c.width=Math.round(v.width);c.height=Math.round(v.height);
+      await page.render({canvasContext:c.getContext("2d"),viewport:v}).promise;
+      intake.pages.push(c.toDataURL("image/jpeg",.6));
+      if(i<=maxImg) blobs.push(await new Promise(r=>c.toBlob(r,"image/jpeg",.85)));
+      renderIntake();
+    }
+  }
+  return {text:text.trim(),blobs};
+}
+async function readSheet(file){
+  if(intake.status==="reading"||intake.status==="thinking") return;
+  Object.assign(intake,{status:"reading",file:file.name,pages:[],result:null,accept:{},msg:"",demo:false});
+  renderIntake();
+  if(!intake.sampler){
+    try{if(file.type==="application/pdf"||/\.pdf$/i.test(file.name)) await pdfToPages(file); else intake.pages=[URL.createObjectURL(file)];}catch(e){}
+    intake.status="thinking";renderIntake();
+    await new Promise(r=>setTimeout(r,1800));
+    const name=file.name;demoIntake();intake.file=name+" (simuliert)";state.draft.datenblatt=name;renderIntake();return;}
+  try{
+    let text="",blobs=[];
+    const isPdf=file.type==="application/pdf"||/\.pdf$/i.test(file.name);
+    if(isPdf){({text,blobs}=await pdfToPages(file));
+      if(text.replace(/--- Seite \d+ ---/g,"").trim().length<40&&!blobs.length) throw {code:"empty",message:"Das PDF enthält keinen lesbaren Text. Lade es als Foto hoch."};}
+    else{
+      if(!intake.imgLimits) throw {code:"images_unavailable",message:"Fotos können in dieser Ansicht nicht gesendet werden. Lade das Datenblatt als PDF hoch."};
+      blobs=[file];intake.pages=[URL.createObjectURL(file)];
+    }
+    intake.status="thinking";intake.ctl=new AbortController();renderIntake();
+    const opts={signal:intake.ctl.signal,modelTier:"default"};if(blobs.length) opts.images=blobs;
+    const raw=await intake.sampler.json(buildPrompt(text),opts);
+    state.draft.datenblatt=file.name;
+    showResult(normalize(raw&&typeof raw==="object"?raw:{}));
+  }catch(e){
+    if(e?.code==="cancelled"){intake.status="idle";renderIntake();return;}
+    const map={not_granted:"Der Zugriff auf Claude wurde nicht erlaubt.",rate_limited:"Gerade zu viele Anfragen. Versuche es in einer Minute erneut.",
+      image_rejected:"Die Datei ist zu groß oder kein lesbares Bild.",invalid_json:"Die Antwort war unvollständig. Bitte noch einmal versuchen.",
+      refused:"Die KI hat dieses Dokument nicht ausgewertet.",prompt_too_large:"Das Datenblatt ist zu lang. Lade nur die Seite mit den Produktdaten hoch.",
+      images_unavailable:"Fotos können in dieser Ansicht nicht gesendet werden. Lade das Datenblatt als PDF hoch.",sampling_disabled:"Claude ist für dieses Konto nicht verfügbar."};
+    Object.assign(intake,{status:"error",msg:map[e?.code]||e?.message||"Unbekannter Fehler. Bitte erneut versuchen."});renderIntake();
+  }
+}
+function showResult(res){
+  intake.result=res;intake.status="review";intake.accept={};
+  reviewRows().forEach(r=>intake.accept[r.k]=!r.blocked);renderIntake();
+}
+function applyIntake(){
+  const d=state.draft;let n=0;
+  reviewRows().forEach(r=>{if(!intake.accept[r.k]||r.blocked) return;
+    const v=Array.isArray(r.v)?[...r.v]:r.v;
+    if(r.k.startsWith("technik.")) d.technik[r.k.slice(8)]=v; else d[r.k]=v;
+    d.ki.add(r.k);n++;});
+  if(["technik.l","technik.b","technik.h"].some(k=>d.ki.has(k))) d.ki.add("masse");
+  d.beispiel=false;intake.status="idle";intake.result=null;
+  toast(`${n} Werte aus dem Datenblatt übernommen`);render();
+}
+function demoIntake(){
+  Object.assign(intake,{file:"Beispiel-Datenblatt.pdf",pages:intake.status==="thinking"?intake.pages:[],demo:true});
+  showResult(normalize({bezeichnung:"Beispiel Kohlebrand Rot-Bunt",artikelnummer_hersteller:"EB-4711",hersteller:"Engels",produkttyp:"beides",herstellung:"handform",
+    farben:["rotbunt","braun"],formate:["WDF","WF"],oberflaeche:["besandet"],technik:{l:"210",b:"100",h:"65",gewicht:"2,1",frost:"F2",staerke:"20"},
+    herstellertext:"Beispieltext aus einem Datenblatt: Handgeformter Verblender, im Ringofen gebrannt, mit besandeter Oberfläche.",
+    hinweise:["Das Blatt nennt zwei Formate. Die Maße gelten für WDF.","Druckfestigkeit und Wasseraufnahme stehen nicht im Blatt."]}));
+}
+
+/* ---- Formular-Schritte ---- */
+function stepBody(d){
+  const head=`<div class="form-head"><div><div class="eyebrow">Schritt ${state.step+1} von 5</div><h2>${STEPS[state.step].t}</h2></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${d.beispiel?'<span class="tag example">Beispieldaten</span>':""}${d.ki.size?`<span class="ki">${[...d.ki].filter(k=>k!=="masse").length} Werte aus Datenblatt</span>`:""}</div></div>`;
+  const nav=`<div class="nav"><button class="btn" data-act="prev" ${state.step===0?"disabled":""}>Zurück</button>
+    ${state.step<4?`<button class="btn primary" data-act="next">Weiter: ${STEPS[state.step+1].t}</button>`:
+    `<button class="btn red" data-act="commit">${d.editSku?"Änderungen übernehmen":"Ins Sortiment übernehmen"}</button>`}</div>`;
+  let b="";
+  if(state.step===0){const ss=skuState(d);
+    b=`<div class="field"><span class="lbl">Produkttyp <span class="req">*</span>${kiTag("typ")}</span>
+      <div class="choices">${Object.entries(TYPEN).map(([k,v])=>`<button class="choice" data-pick="typ" data-val="${k}" aria-pressed="${d.typ===k}"><b>${v.label}</b><small>${v.desc}</small></button>`).join("")}</div></div>
+    <div class="grid2">
+      <div class="field"><label for="f-sku">Artikelnummer (Harbecke-Code) <span class="req">*</span></label>
+        <input type="text" id="f-sku" class="mono ${d.sku?(ss.ok?"valid":"invalid"):""}" data-bind="sku" value="${esc(d.sku)}" placeholder="HBR 11-105" ${d.editSku?"readonly":""} autocomplete="off">
+        <div class="msg ${ss.cls}" id="skuMsg">${esc(ss.msg)} ${ss.dup?`<button class="link-btn" data-act="loadDup" data-sku="${esc(ss.dup)}">Bestehendes laden</button>`:""}</div>
+        <span class="hint">Riemchen bekommen automatisch ein „ R“ angehängt.</span></div>
+      <div class="field"><label for="f-bez">Bezeichnung beim Hersteller${kiTag("bezeichnung")}</label>
+        <input type="text" id="f-bez" class="${kiCls("bezeichnung")}" data-bind="bezeichnung" value="${esc(d.bezeichnung)}" placeholder="Name aus dem Datenblatt">
+        <label for="f-art" class="hint" style="margin-top:6px">Artikelnummer beim Hersteller${kiTag("artikel_hersteller")}</label>
+        <input type="text" id="f-art" class="mono ${kiCls("artikel_hersteller")}" data-bind="artikel_hersteller" value="${esc(d.artikel_hersteller)}" placeholder="optional"></div></div>
+    <div class="field"><label for="f-herst">Hersteller <span class="req">*</span>${kiTag("hersteller")}</label>
+      <select id="f-herst" class="${kiCls("hersteller")}" data-bind="hersteller"><option value="">– bitte wählen –</option>${HERSTELLER.map(h=>`<option ${d.hersteller===h?"selected":""}>${h}</option>`).join("")}</select></div>
+    <div class="field"><span class="lbl">Herstellungsart <span class="req">*</span>${kiTag("herstellung")}</span>
+      <div class="choices">${Object.entries(HERSTELLUNG).map(([k,v])=>`<button class="choice" data-pick="herstellung" data-val="${k}" aria-pressed="${d.herstellung===k}">${edgeSvg(k)}<b>${v.label}</b><small>${v.desc}</small></button>`).join("")}</div></div>`;}
+  if(state.step===1){
+    b=`<div class="field"><span class="lbl">Farben <span class="req">*</span>${kiTag("farben")} <span class="hint">Mehrfachauswahl, die erste ist die Hauptfarbe</span></span>
+      <div class="swatches">${Object.keys(FARBEN).map(f=>{const i=d.farben.indexOf(f);return `<button class="sw" data-toggle="farben" data-val="${f}" aria-pressed="${i>-1}"><span class="chip" style="background:${FARBEN[f]}"></span>${f}${i>-1?`<span class="ord">${i+1}</span>`:""}</button>`}).join("")}</div></div>
+    <div class="field"><span class="lbl">Formate <span class="req">*</span>${kiTag("formate")}</span>
+      <div class="pills">${FORMATE.map(f=>`<button class="pill" data-toggle="formate" data-val="${f.k}" aria-pressed="${d.formate.includes(f.k)}"><b>${f.k}</b> ${f.n}${f.m?` <small>${f.m.join("×")}</small>`:""}</button>`).join("")}</div>
+      <span class="hint">Maße in mm (L × B × H) nach DIN, wo es ein Normmaß gibt. Sonst gilt das Datenblatt.</span></div>
+    <div class="field"><span class="lbl">Oberfläche${kiTag("oberflaeche")}</span>
+      <div class="pills">${OBERFL.map(o=>`<button class="pill" data-toggle="oberflaeche" data-val="${o}" aria-pressed="${d.oberflaeche.includes(o)}">${o}</button>`).join("")}</div></div>`;}
+  if(state.step===2){const t=d.technik,firstF=FORMATE.find(f=>f.k===d.formate[0]),riem=["riemchen","beides","daemmklinker"].includes(d.typ);
+    const inp=(k,ph,lbl)=>`<div class="field"><label for="f-${k}">${lbl}${kiTag("technik."+k)}</label><input type="text" id="f-${k}" class="mono ${kiCls("technik."+k)}" data-bind="technik.${k}" value="${esc(t[k])}" placeholder="${ph}"></div>`;
+    b=`<div class="field"><span class="lbl">Maße in mm <span class="req">*</span>${kiTag("masse")}
+      ${firstF?.m?`<button class="link-btn" data-act="fillDims">Normmaß ${firstF.k} übernehmen (${firstF.m.join(" × ")})</button>`:""}</span>
+      <div class="grid3">${["l","b","h"].map((k,i)=>`<input type="number" id="f-${k}" class="mono ${kiCls("technik."+k)}" data-bind="technik.${k}" value="${esc(t[k])}" placeholder="${["Länge","Breite","Höhe"][i]}" aria-label="${["Länge","Breite","Höhe"][i]} in mm" inputmode="decimal">`).join("")}</div></div>
+    <div class="calc"><canvas class="wall" id="wall" width="360" height="220" aria-label="Mauerwerk im Läuferverband"></canvas>
+      <div class="field"><span class="eyebrow">Rechenhilfe Bedarf</span><div class="calc-num" id="calcNum">–</div>
+        <label for="f-fuge" class="hint">Fugenbreite <b id="fugeVal">${t.fuge} mm</b></label>
+        <input type="range" id="f-fuge" min="8" max="15" step="1" value="${t.fuge}" data-bind="technik.fuge">
+        <span class="hint">Richtwert im Läuferverband ohne Verschnitt. Gilt der Herstellerwert, trag ihn unten ein.</span></div></div>
+    <div class="grid3">${inp("bedarf","Stk./m²","Bedarf laut Hersteller")}${inp("gewicht","kg/Stk.","Gewicht")}
+      <div class="field"><label for="f-frost">Frostwiderstand${kiTag("technik.frost")}</label><select id="f-frost" class="${kiCls("technik.frost")}" data-bind="technik.frost">${Object.entries(FROST).map(([k,v])=>`<option value="${k}" ${t.frost===k?"selected":""}>${v}</option>`).join("")}</select></div>
+      ${inp("druck","N/mm²","Druckfestigkeit")}${inp("wasser","%","Wasseraufnahme")}${riem?inp("staerke","mm","Riemchenstärke"):""}</div>
+    ${riem?`<label class="toggle"><input type="checkbox" id="f-ecken" data-bind="technik.ecken" ${t.ecken?"checked":""}><span><b>Eckriemchen lieferbar</b><br><span class="hint">Wird auf der Produktseite als Hinweis gezeigt.</span></span></label>`:""}
+    <div class="msg muted">Datenblatt: ${d.datenblatt?`<b class="mono">${esc(d.datenblatt)}</b> wird als Download am Produkt hinterlegt.`:"noch keins eingelesen. Oben einlesen, dann wird es am Produkt als Download hinterlegt."}</div>`;}
+  if(state.step===3){
+    b=`<label class="drop" id="drop" for="f-img"><b>Produktbilder hierher ziehen oder auswählen</b><span class="hint">JPG, PNG oder WebP, mindestens 800 px breit. Dateinamen und Alt-Texte setzt das Tool automatisch.</span></label>
+    <input type="file" id="f-img" accept="image/*" multiple hidden>
+    ${d.keep?.anzahl?`<div class="msg ok">${d.keep.anzahl} Bilder aus dem Shop bleiben erhalten${d.keep.frei?", inklusive Freisteller":""}. Neue Bilder kommen hinzu.</div>`:""}
+    <div class="imgs" id="imgs">${d.bilder.map((x,i)=>imgCard(d,x,i)).join("")||'<p class="hint">Noch keine neuen Bilder.</p>'}</div>
+    <p class="hint">Bild 1 wird das Hauptbild. Für die Kategorieseiten braucht jedes Produkt einen Freisteller.</p>`;}
+  if(state.step===4){const tl=seoTitel(d),me=metaText(d);
+    b=`<div class="field"><label for="f-text">Herstellertext / Rohdaten${kiTag("herstellertext")}</label>
+      <textarea id="f-text" class="${kiCls("herstellertext")}" data-bind="herstellertext" placeholder="Beschreibung aus Datenblatt oder Katalog">${esc(d.herstellertext)}</textarea>
+      <span class="hint" id="textCount">${d.herstellertext.trim().length} Zeichen</span></div>
+    <label class="toggle"><input type="checkbox" id="f-claude" data-bind="claudeText" ${d.claudeText?"checked":""}>
+      <span><b>Produkttext von Claude schreiben lassen</b><br><span class="hint">Beim Import entstehen daraus Kurzbeschreibung, Beschreibung, Alt-Texte und Meta-Daten. Du gibst vor dem Veröffentlichen frei.</span></span></label>
+    <div class="field"><span class="lbl">Vorschau in der Google-Suche</span>
+      <div class="serp"><span class="u">klinkerhandel.de › produkt › ${esc(slug(d.sku||"neu"))}</span><span class="t">${esc(tl)}</span><span class="d">${esc(me)}</span></div>
+      <div class="grid2"><div><div class="hint">Titel ${tl.length}/60 Zeichen</div><div class="meter ${tl.length>60?"over":""}"><i style="width:${Math.min(100,tl.length/60*100)}%"></i></div></div>
+        <div><div class="hint">Beschreibung ${me.length}/155 Zeichen</div><div class="meter ${me.length>155?"over":""}"><i style="width:${Math.min(100,me.length/155*100)}%"></i></div></div></div></div>
+    <div class="field"><span class="lbl">Wird angelegt als</span><div class="pills">${skus(d).map(s=>`<span class="pill static mono">${esc(s)}</span>`).join("")}<span class="pill static">Status: Entwurf</span></div></div>`;}
+  return head+b+nav;
+}
+function edgeSvg(k){
+  const p={handform:"M2 6 Q12 3 24 5 T48 4 T70 6 L70 18 Q60 21 48 19 T24 20 T2 19 Z",strangpress:"M2 4 H70 V19 H2 Z",wasserstrich:"M6 4 H66 Q70 4 70 8 V15 Q70 19 66 19 H6 Q2 19 2 15 V8 Q2 4 6 4 Z"}[k];
+  return `<svg viewBox="0 0 72 22" aria-hidden="true"><path d="${p}" fill="#a8452f"/>${k==="wasserstrich"?'<path d="M10 10 q16 -3 30 0 t26 1" stroke="#d58b6a" stroke-width="1.2" fill="none"/>':""}</svg>`;
+}
+function imgCard(d,x,i){
+  return `<div class="img"><div class="ph" style="background-image:url('${x.src}')"><span class="no">${i+1}</span>${x.w<800?`<span class="lowres">Nur ${x.w} px breit</span>`:""}</div>
+    <div class="meta"><select data-imgrole="${i}" aria-label="Rolle von Bild ${i+1}">${Object.entries(ROLLEN).map(([k,v])=>`<option value="${k}" ${x.rolle===k?"selected":""}>${v}</option>`).join("")}</select>
+    <span class="fn">${esc(dateiname(d,i))}</span>
+    <div class="acts"><button class="icon-btn" data-imgmove="${i}" data-dir="-1" aria-label="Nach vorne" ${i===0?"disabled":""}>←</button>
+    <button class="icon-btn" data-imgmove="${i}" data-dir="1" aria-label="Nach hinten" ${i===d.bilder.length-1?"disabled":""}>→</button>
+    <button class="icon-btn" data-imgdel="${i}" style="margin-left:auto">Entfernen</button></div></div></div>`;
+}
+function updateSide(){
+  const d=state.draft,side=$("#side");if(!side) return;
+  const c=checks(d),sc=score(d),main=d.bilder[0],col=sc>=90?"var(--ok)":sc>=60?"var(--warn-dot)":"var(--bad)",C=2*Math.PI*20,open=c.filter(x=>x.req&&!x.ok).length;
+  side.innerHTML=`<div class="panel preview"><div class="pv-img" style="${main?`background-image:url('${main.src}')`:""}">${main?"":"Noch kein Bild"}</div>
+    <div class="pv-body"><span class="eyebrow">${esc(d.hersteller||"Hersteller")} · ${esc(HERSTELLUNG[d.herstellung]?.label||"Herstellung")}</span>
+      <div class="pv-title">${esc(produktName(d,d.typ==="riemchen"))}</div>
+      <div class="pv-dots">${d.farben.map(f=>`<i title="${f}" style="background:${FARBEN[f]}"></i>`).join("")}</div>
+      <div class="pv-row"><span>Format</span><span class="mono">${esc(d.formate.join(", ")||"–")}</span></div>
+      <div class="pv-row"><span>Maße</span><span class="mono">${d.technik.l&&d.technik.h?esc(`${d.technik.l} × ${d.technik.b||"?"} × ${d.technik.h} mm`):"–"}</span></div>
+      <div class="pv-row"><span>Bedarf</span><span class="mono">${d.technik.bedarf?esc(d.technik.bedarf)+" Stk./m²":bedarf(d)?"≈ "+Math.round(bedarf(d))+" Stk./m²":"–"}</span></div>
+      ${d.typ==="beides"?`<span class="pv-link">Auch als Riemchen erhältlich →</span>`:""}</div></div>
+  <div class="panel check"><div class="check-head">
+    <svg class="ring" viewBox="0 0 48 48" role="img" aria-label="Vollständigkeit ${sc} Prozent"><circle cx="24" cy="24" r="20" fill="none" stroke="var(--line)" stroke-width="4"/>
+      <circle cx="24" cy="24" r="20" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-sc/100)}" transform="rotate(-90 24 24)" style="transition:stroke-dashoffset .4s"/>
+      <text x="24" y="28" text-anchor="middle">${sc}%</text></svg>
+    <div><h3>Checkliste</h3><span class="hint">${open?`${open} Pflichtangabe${open>1?"n fehlen":" fehlt"}`:"Alle Pflichtangaben vollständig"}</span></div></div>
+    <ul>${c.map(x=>`<li><button data-step="${x.step}"><span class="lamp ${x.ok?"ok":x.req?"bad":"warn"}"></span>${x.l}<span class="t2">${x.req?"Pflicht":"Empfohlen"}</span></button></li>`).join("")}</ul></div>`;
+  drawWall();
+}
+function drawWall(){
+  const cv=$("#wall");if(!cv) return;const d=state.draft,x=cv.getContext("2d");
+  const l=num(d.technik.l)||210,h=num(d.technik.h)||65,f=num(d.technik.fuge)||10,sc=360/1000;
+  x.fillStyle="#cdc8be";x.fillRect(0,0,360,220);
+  const cols=d.farben.map(c=>FARBEN[c]).filter(c=>c&&c.startsWith("#"));const pal=cols.length?cols:["#a8452f","#93402c","#b5583a"];
+  let r=0;for(let y=0;y<220;y+=(h+f)*sc,r++){for(let xx=(r%2?-(l+f)/2:0)*sc;xx<360;xx+=(l+f)*sc){x.fillStyle=pal[Math.abs(Math.round(xx*7+y*3))%pal.length];x.fillRect(xx,y,l*sc,h*sc)}}
+  const v=bedarf(d),el=$("#calcNum");if(el) el.innerHTML=v?`≈ ${Math.round(v)} <small>Stk./m² bei ${f} mm Fuge</small>`:"–";
+  const fv=$("#fugeVal");if(fv) fv.textContent=f+" mm";
+}
+
+/* ---------- Sortiment ---------- */
+function prodScore(p){const c=[!!p.hersteller,!!p.herstellung,p.farben.length>0,p.formate.length>0,p.hatFreisteller,p.bilderAnzahl>=3,!!(p.technik&&p.technik.l)];return Math.round(c.filter(Boolean).length/c.length*100);}
+function viewSortiment(){
+  const rows=state.products.filter(p=>{
+    if(state.q&&!(p.sku+" "+p.hersteller).toLowerCase().includes(state.q.toLowerCase())) return false;
+    if(state.filter==="neu") return p.quelle==="neu";
+    if(state.filter==="offen") return prodScore(p)<100;
+    if(state.filter==="geaendert") return p.aktion!=="keine";
+    return true;});
+  const allSel=rows.length&&rows.every(p=>state.sel.has(p.sku)),miss='<span class="badge miss">fehlt</span>';
+  return `<div class="view-head"><div><div class="eyebrow">Mehrfachbearbeitung</div><h1>Sortiment</h1>
+    <p class="lead">Mehrere Produkte markieren und Werte für alle auf einmal setzen. Geänderte Produkte landen automatisch im Export.</p></div>
+    <span class="tag example">Auszug aus dem Live-Shop</span></div>
+  <div class="toolbar"><input type="text" id="q" placeholder="Nummer oder Hersteller suchen" value="${esc(state.q)}" aria-label="Suche">
+    <div class="seg" role="group" aria-label="Filter">${[["alle","Alle"],["offen","Unvollständig"],["neu","Neu erfasst"],["geaendert","Geändert"]].map(([k,v])=>`<button data-filter="${k}" aria-pressed="${state.filter===k}">${v}</button>`).join("")}</div></div>
+  <div class="tbl-wrap"><table class="data"><thead><tr><th><input type="checkbox" id="selAll" ${allSel?"checked":""} aria-label="Alle auswählen"></th>
+    <th>Artikelnummer</th><th>Typ</th><th>Hersteller</th><th>Herstellung</th><th>Farben</th><th>Formate</th><th>Daten</th><th>Status</th><th></th></tr></thead>
+    <tbody>${rows.map(p=>{const s=prodScore(p),ch=f=>p.geaendert.includes(f)?"changed":"";return `<tr class="${state.sel.has(p.sku)?"sel":""}">
+      <td><input type="checkbox" data-sel="${esc(p.sku)}" ${state.sel.has(p.sku)?"checked":""} aria-label="${esc(p.sku)} auswählen"></td>
+      <td class="mono"><b>${esc(p.sku)}</b></td><td>${TYPEN[p.typ]?.kurz||p.typ}</td>
+      <td class="${ch("hersteller")}">${p.hersteller?esc(p.hersteller):miss}</td>
+      <td class="${ch("herstellung")}">${HERSTELLUNG[p.herstellung]?.label||miss}</td>
+      <td class="${ch("farben")}"><div class="pv-dots">${p.farben.map(f=>`<i title="${f}" style="background:${FARBEN[f]}"></i>`).join("")||miss}</div></td>
+      <td class="mono ${ch("formate")}">${esc(p.formate.join(", "))||miss}</td>
+      <td><span class="bar"><i style="width:${s}%;background:${s>=90?"var(--ok)":s>=60?"var(--warn-dot)":"var(--bad)"}"></i></span> <span class="mono hint">${s}%</span></td>
+      <td>${p.aktion==="anlegen"?'<span class="badge new">wird angelegt</span>':p.aktion==="aktualisieren"?'<span class="badge upd">wird aktualisiert</span>':'<span class="badge old">unverändert</span>'}</td>
+      <td><button class="link-btn" data-edit="${esc(p.sku)}">Bearbeiten</button></td></tr>`}).join("")||'<tr><td colspan="10" class="hint">Keine Produkte für diesen Filter.</td></tr>'}</tbody></table></div>
+  ${state.sel.size?`<div class="bulk" role="region" aria-label="Mehrfachbearbeitung"><b>${state.sel.size} ausgewählt</b>
+    <select id="bkHerst" aria-label="Hersteller setzen"><option value="">Hersteller setzen …</option>${HERSTELLER.map(h=>`<option>${h}</option>`).join("")}</select>
+    <select id="bkFarbe" aria-label="Farbe hinzufügen"><option value="">Farbe hinzufügen …</option>${Object.keys(FARBEN).map(f=>`<option>${f}</option>`).join("")}</select>
+    <select id="bkFormat" aria-label="Format hinzufügen"><option value="">Format hinzufügen …</option>${FORMATE.map(f=>`<option>${f.k}</option>`).join("")}</select>
+    <select id="bkArt" aria-label="Herstellungsart setzen"><option value="">Herstellungsart …</option>${Object.entries(HERSTELLUNG).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join("")}</select>
+    <button class="btn red" data-act="bulkApply">Auf ${state.sel.size} anwenden</button><button class="btn ghost" data-act="bulkClear">Auswahl aufheben</button></div>`:""}`;
+}
+
+/* ---------- Export ---------- */
+function exportData(){
+  const out=state.products.filter(p=>p.aktion!=="keine").map(p=>{
+    if(p.aktion==="aktualisieren"&&p.quelle==="bestand"){const o={aktion:"aktualisieren",sku:p.sku};p.geaendert.forEach(f=>o[f]=p[f]);return o;}
+    return {aktion:p.aktion,sku:p.sku,stein_id:p.stein_id||p.sku.replace(/ R$/,""),produkttyp:p.typ,hersteller:p.hersteller,herstellungsart:p.herstellung,
+      bezeichnung_hersteller:p.bezeichnung||null,artikelnummer_hersteller:p.artikel_hersteller||null,farben:p.farben,formate:p.formate,oberflaeche:p.oberflaeche||[],
+      technik:p.technik,herstellertext:p.herstellertext,aus_datenblatt:p.ki||[],datenblatt:p.datenblatt||null,
+      texte_von_claude:p.claudeText!==false,seo:{titel:p.seoTitel,meta:p.meta},bilder:p.bilder||[],status:"entwurf"};});
+  return {quelle:"Klinkerhandel Produktstation",erstellt:new Date().toISOString().slice(0,10),anzahl:out.length,produkte:out};
+}
+function hl(json){return esc(json).replace(/(&quot;[^&]*?&quot;)(\s*:)/g,'<span class="k">$1</span>$2').replace(/:\s(&quot;.*?&quot;)/g,': <span class="s">$1</span>')
+  .replace(/:\s(-?\d[\d.]*)/g,': <span class="n">$1</span>').replace(/:\s(true|false|null)/g,': <span class="b">$1</span>');}
+function viewExport(){
+  const data=exportData(),js=JSON.stringify(data,null,2),neu=data.produkte.filter(p=>p.aktion==="anlegen").length,upd=data.produkte.length-neu;
+  const warn=state.products.filter(p=>p.aktion!=="keine"&&prodScore(p)<100);
+  return `<div class="view-head"><div><div class="eyebrow">Übergabe an Claude</div><h1>Export</h1>
+    <p class="lead">Das Paket enthält nur neue und geänderte Produkte. Bestehende Produkte werden über die Artikelnummer gefunden, neue entstehen als Entwurf.</p></div></div>
+  <div class="exp"><div class="panel" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    <div class="stats"><div class="stat"><b>${neu}</b><span>neu</span></div><div class="stat"><b>${upd}</b><span>Updates</span></div><div class="stat"><b>${state.products.length-data.produkte.length}</b><span>unverändert</span></div></div>
+    ${warn.length?`<div class="msg warn" style="align-items:flex-start">${warn.length} Produkt${warn.length>1?"e haben":" hat"} noch Lücken: ${warn.map(p=>esc(p.sku)).join(", ")}. Claude meldet sie vor der Anlage.</div>`:data.produkte.length?'<div class="msg ok">Alles vollständig</div>':""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="download" ${data.produkte.length?"":"disabled"}>JSON herunterladen</button><button class="btn" data-act="copy" ${data.produkte.length?"":"disabled"}>Kopieren</button></div>
+    <span class="hint">In der fertigen Version speichert dieser Knopf ein ZIP mit <span class="mono">produkte.json</span>, den umbenannten Bildern und den Datenblättern.</span>
+    <h3>So geht es weiter</h3>
+    <ol class="flow"><li>Paket an Claude geben</li><li>Claude prüft Lücken und Dubletten und schreibt die Texte</li><li>Anlage im Shop als Entwurf</li><li>Freigabe, dann online</li></ol></div>
+  <div style="min-width:0">${data.produkte.length?`<pre class="code" id="json">${hl(js)}</pre>`:`<div class="panel" style="padding:24px"><h2>Noch nichts zu exportieren</h2><p class="lead">Erfasse ein Produkt oder ändere im Sortiment mehrere auf einmal. Danach erscheint hier das Paket.</p></div>`}</div></div>`;
+}
+
+/* ---------- Aktionen ---------- */
+function setPath(o,p,v){const k=p.split(".");while(k.length>1)o=o[k.shift()];o[k[0]]=v;}
+function commitDraft(){
+  const d=state.draft,missing=checks(d).filter(c=>c.req&&!c.ok);
+  if(missing.length){state.step=missing[0].step;render();toast(`Noch offen: ${missing[0].l}`);return;}
+  const bilder=d.bilder.map((b,i)=>({datei:dateiname(d,i),rolle:b.rolle,alt:altText(d,b),original:b.orig}));
+  const make=(sku,typ)=>({sku,stein_id:d.sku.trim(),typ,hersteller:d.hersteller,herstellung:d.herstellung,bezeichnung:d.bezeichnung,artikel_hersteller:d.artikel_hersteller,
+    farben:[...d.farben],formate:[...d.formate],oberflaeche:[...d.oberflaeche],technik:{...d.technik,bedarf:d.technik.bedarf||(bedarf(d)?Math.round(bedarf(d))+" (Richtwert)":"")},
+    herstellertext:d.herstellertext,claudeText:d.claudeText,seoTitel:seoTitel(d),meta:metaText(d),bilder,bilderAnzahl:bilder.length+(d.keep?.anzahl||0),
+    hatFreisteller:d.bilder.some(b=>b.rolle==="freisteller")||!!d.keep?.frei,ki:[...d.ki].filter(k=>k!=="masse"),datenblatt:d.datenblatt,quelle:"neu",aktion:"anlegen",geaendert:[]});
+  const list=d.typ==="beides"?[make(d.sku.trim(),"verblender"),make(d.sku.trim()+" R","riemchen")]:[make(skus(d)[0],d.typ)];
+  list.forEach(n=>{const i=state.products.findIndex(p=>p.sku===n.sku);
+    if(i>-1){const old=state.products[i];n.quelle=old.quelle;n.aktion=old.quelle==="neu"?"anlegen":"aktualisieren";
+      if(n.aktion==="aktualisieren") n.geaendert=["hersteller","herstellung","farben","formate","oberflaeche","technik","herstellertext"].concat(d.bilder.length?["bilder"]:[]);
+      state.products[i]=n;} else state.products.unshift(n);});
+  toast(`${list.map(p=>p.sku).join(" und ")} ${d.editSku?"aktualisiert":"im Sortiment"}`);
+  state.draft=emptyDraft();state.step=0;go("sortiment");
+}
+function editProduct(sku){
+  const p=state.products.find(x=>x.sku===sku);if(!p) return;
+  const base=p.sku.replace(/ R$/,""),d=emptyDraft();
+  Object.assign(d,{editSku:base,sku:base,typ:p.sku.endsWith(" R")?"riemchen":p.typ,hersteller:p.hersteller,herstellung:p.herstellung,farben:[...p.farben],formate:[...p.formate],
+    oberflaeche:[...(p.oberflaeche||[])],herstellertext:p.herstellertext||"",bezeichnung:p.bezeichnung||"",artikel_hersteller:p.artikel_hersteller||"",datenblatt:p.datenblatt||null});
+  if(state.products.find(x=>x.sku===base)&&state.products.find(x=>x.sku===base+" R")) d.typ="beides";
+  Object.assign(d.technik,p.technik||{});d.keep={anzahl:p.bilderAnzahl||0,frei:!!p.hatFreisteller};
+  state.draft=d;state.step=0;go("erfassen");
+}
+function addFiles(files){
+  const d=state.draft;
+  [...files].filter(f=>f.type.startsWith("image/")).forEach(f=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+    d.bilder.push({id:"u"+(uid++),src:r.result,rolle:d.bilder.some(b=>b.rolle==="freisteller")||d.keep?.frei?"wand":"freisteller",w:im.naturalWidth,h:im.naturalHeight,orig:f.name});
+    d.beispiel=false;rerenderForm();updateSide();};im.src=r.result;};r.readAsDataURL(f);});
+}
+function rerenderForm(){const f=$("#form");if(f){f.innerHTML=stepBody(state.draft);bindForm();}
+  document.querySelectorAll(".step").forEach((b,i)=>{const done=stepDone(state.draft,i)&&i!==state.step;b.classList.toggle("done",done);b.querySelector(".dot").textContent=done?"✓":i+1;});}
+function go(v){state.view=v;if(location.hash!=="#"+v) history.replaceState(null,"","#"+v);render();window.scrollTo({top:0});}
+function bindForm(){
+  const drop=$("#drop");
+  if(drop){["dragenter","dragover"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("over")}));
+    ["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("over")}));
+    drop.addEventListener("drop",ev=>addFiles(ev.dataTransfer.files));}
+  const fi=$("#f-img");if(fi) fi.addEventListener("change",()=>addFiles(fi.files));
+  drawWall();
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t) return;const d=state.draft;
+  if(t.dataset.view){go(t.dataset.view);return;}
+  if(t.dataset.step!==undefined&&state.view==="erfassen"){state.step=+t.dataset.step;render();return;}
+  if(t.dataset.pick){d[t.dataset.pick]=t.dataset.val;d.ki.delete(t.dataset.pick);d.beispiel=false;rerenderForm();updateSide();return;}
+  if(t.dataset.toggle){const a=d[t.dataset.toggle],v=t.dataset.val,i=a.indexOf(v);i>-1?a.splice(i,1):a.push(v);d.ki.delete(t.dataset.toggle);d.beispiel=false;rerenderForm();updateSide();return;}
+  if(t.dataset.imgmove!==undefined){const i=+t.dataset.imgmove,j=i+ +t.dataset.dir;[d.bilder[i],d.bilder[j]]=[d.bilder[j],d.bilder[i]];rerenderForm();updateSide();return;}
+  if(t.dataset.imgdel!==undefined){d.bilder.splice(+t.dataset.imgdel,1);rerenderForm();updateSide();return;}
+  if(t.dataset.edit){editProduct(t.dataset.edit);return;}
+  if(t.dataset.filter){state.filter=t.dataset.filter;render();return;}
+  const a=t.dataset.act;
+  if(a==="next"){state.step=Math.min(4,state.step+1);render();}
+  if(a==="prev"){state.step=Math.max(0,state.step-1);render();}
+  if(a==="commit") commitDraft();
+  if(a==="newDraft"){state.draft=emptyDraft();state.step=0;render();toast("Leeres Formular geöffnet");}
+  if(a==="loadDup") editProduct(t.dataset.sku);
+  if(a==="fillDims"){const f=FORMATE.find(x=>x.k===d.formate[0]);if(f?.m){[d.technik.l,d.technik.b,d.technik.h]=f.m.map(String);["technik.l","technik.b","technik.h","masse"].forEach(k=>d.ki.delete(k));rerenderForm();updateSide();}}
+  if(a==="applyIntake") applyIntake();
+  if(a==="resetIntake"){intake.status="idle";intake.result=null;renderIntake();}
+  if(a==="stopIntake") intake.ctl?.abort();
+  if(a==="demoIntake") demoIntake();
+  if(a==="bulkClear"){state.sel.clear();render();}
+  if(a==="bulkApply"){
+    const h=$("#bkHerst").value,fa=$("#bkFarbe").value,fo=$("#bkFormat").value,ar=$("#bkArt").value;
+    if(!h&&!fa&&!fo&&!ar){toast("Wähle mindestens einen Wert aus");return;}
+    let n=0;state.products.forEach(p=>{if(!state.sel.has(p.sku)) return;n++;
+      const mark=f=>{if(!p.geaendert.includes(f))p.geaendert.push(f);if(p.aktion==="keine")p.aktion="aktualisieren";};
+      if(h&&p.hersteller!==h){p.hersteller=h;mark("hersteller");}
+      if(ar&&p.herstellung!==ar){p.herstellung=ar;mark("herstellung");}
+      if(fa&&!p.farben.includes(fa)){p.farben.push(fa);mark("farben");}
+      if(fo&&!p.formate.includes(fo)){p.formate.push(fo);mark("formate");}});
+    toast(`${n} Produkte geändert`);render();}
+  if(a==="download"){const blob=new Blob([JSON.stringify(exportData(),null,2)],{type:"application/json"});const u=URL.createObjectURL(blob);
+    const l=document.createElement("a");l.href=u;l.download="produkte-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);toast("JSON gespeichert");}
+  if(a==="copy"){const txt=JSON.stringify(exportData(),null,2);
+    const fallback=()=>{const r=document.createRange();r.selectNodeContents($("#json"));const s=getSelection();s.removeAllRanges();s.addRange(r);toast("Text markiert, jetzt mit Strg+C kopieren");};
+    try{navigator.clipboard.writeText(txt).then(()=>toast("JSON kopiert"),fallback);}catch(err){fallback();}}
+});
+document.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.dataset.bind){const d=state.draft,v=t.type==="checkbox"?t.checked:t.value;
+    setPath(d,t.dataset.bind,t.dataset.bind==="sku"?v.toUpperCase():v);
+    if(d.ki.has(t.dataset.bind)){d.ki.delete(t.dataset.bind);t.classList.remove("from-ai");}
+    if(t.dataset.bind==="sku"){const pos=t.selectionStart;t.value=d.sku;t.setSelectionRange(pos,pos);
+      const ss=skuState(d);t.classList.toggle("valid",ss.ok&&!!d.sku);t.classList.toggle("invalid",!ss.ok&&!!d.sku);
+      $("#skuMsg").className="msg "+ss.cls;$("#skuMsg").innerHTML=esc(ss.msg)+(ss.dup?` <button class="link-btn" data-act="loadDup" data-sku="${esc(ss.dup)}">Bestehendes laden</button>`:"");}
+    if(t.dataset.bind==="herstellertext"){const c=$("#textCount");if(c)c.textContent=d.herstellertext.trim().length+" Zeichen";}
+    d.beispiel=false;updateSide();return;}
+  if(t.id==="q"){state.q=t.value;const pos=t.selectionStart;render();const q=$("#q");q.focus();q.setSelectionRange(pos,pos);}
+});
+document.addEventListener("change",e=>{
+  const t=e.target,d=state.draft;
+  if(t.dataset.bind&&(t.tagName==="SELECT"||t.type==="checkbox")){setPath(d,t.dataset.bind,t.type==="checkbox"?t.checked:t.value);d.ki.delete(t.dataset.bind);updateSide();rerenderForm();}
+  if(t.dataset.imgrole!==undefined){d.bilder[+t.dataset.imgrole].rolle=t.value;updateSide();}
+  if(t.dataset.accept){intake.accept[t.dataset.accept]=t.checked;renderIntake();}
+  if(t.dataset.sel){t.checked?state.sel.add(t.dataset.sel):state.sel.delete(t.dataset.sel);render();}
+  if(t.id==="selAll"){document.querySelectorAll("[data-sel]").forEach(c=>t.checked?state.sel.add(c.dataset.sel):state.sel.delete(c.dataset.sel));render();}
+});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(["erfassen","sortiment","export"].includes(h)&&h!==state.view){state.view=h;render();}});
+
+const start=location.hash.slice(1);if(["erfassen","sortiment","export"].includes(start)) state.view=start;
+render();
+/* KI-Schnittstelle verbinden */
+(window.claude?.use?window.claude.use("sample"):Promise.resolve(null)).then(async s=>{
+  intake.sampler=s;if(s){const lim=await s.limits().catch(()=>null);intake.imgLimits=lim?.images||null;}
+  intake.ready=true;if(state.view==="erfassen"&&intake.status==="idle") renderIntake();
+}).catch(()=>{intake.ready=true;if(state.view==="erfassen") renderIntake();});
+</script>
+</body>
+</html>
