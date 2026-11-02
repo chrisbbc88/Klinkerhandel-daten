@@ -1,0 +1,244 @@
+# Klinkerhandel ERP – Projektdokumentation
+
+Stand: 02.11.2026 · Verantwortlich: Christian (BBC Digital) · Auftraggeber: Klinkerhandel Harbecke Rhede, Klaus Langenbrink
+
+Statusbegriffe in diesem Dokument: **geplant** · **implementiert** · **lokal geprüft** · **in Staging geprüft** · **produktiv geprüft**.
+
+---
+
+## 1. Zielbild, Annahmen, Umfang
+
+### Projektbriefing
+
+| | |
+|---|---|
+| Projekt | Klinkerhandel ERP |
+| Branche | Fachhandel für Klinker, Verblender, Riemchen, Dämm- und Nistklinker. Lieferant der Ware ist das Baustoffzentrum Harbecke; Klinkerhandel vergibt eigene Artikelnummern (HBR-Codes) und eigene Preise. |
+| Bestehender Code | Produktstation (einzelne HTML-Datei, Prototyp ohne Speicherung). ERP-Repository: Neubau, dieses Projekt. |
+| Nutzung | Intern, ein Unternehmen. Kein Mandantenmodell. |
+| Nutzer | Klaus, Tobi, Sven, Assistenz; Christian für Betreuung und Tests. Etwa 5 Konten, selten gleichzeitig. |
+| Launch-Umfang | Produktpflege, Datenblatt-Abgleich, Veröffentlichen nach WooCommerce. |
+| Danach | Anfrage → Angebotsentwurf. |
+| Web/Mobil | Responsive Webanwendung im Browser. Keine App, kein Offlinebetrieb. |
+| Externe Systeme | WooCommerce (klinkerhandel.de, Alfahosting), Claude-API zum Auslesen der Datenblätter. Die Warenwirtschaft des Baustoffzentrums wird **nicht** angebunden. |
+| Datenmengen | ca. 320 Steine, 560 Produkte, 180 Referenzen, 1.900 Bilddateien; Wachstum gering. |
+| Infrastruktur | Eigener Server des Kunden möglich, Details offen (siehe Abschnitt 7). Datenregion EU. |
+| Budget, Termin | offen |
+| Freigaben für externe Änderungen | keine. Jede Veröffentlichung in den Live-Shop braucht eine ausdrückliche Freigabe. |
+
+### Annahmen (reversibel, bis zur Bestätigung)
+
+1. Die Rollen verteilen sich so: Christian = Admin, Klaus = Leitung, Tobi, Sven, Assistenz = Pflege. Wer Einkaufspreise sehen darf, entscheidet der Kunde.
+2. Farben hängen am Stein (Verblender und Riemchen gleich), Formate am Produkt (sie unterscheiden sich im Bestand zwischen Verblender und Riemchen).
+3. Preise werden im Shop nicht gezeigt (Katalogmodus bleibt). Sie dienen intern und später für Angebote.
+4. Produkt-URLs im Shop bleiben unverändert; der Umbau von Kategorien zu Attributen erfolgt erst nach Freigabe des Zielmodells und mit Weiterleitungsplan.
+5. Das ERP ist die einzige Stelle, an der Produktdaten geändert werden. Änderungen direkt im WordPress-Backend werden beim Abgleich als Abweichung gemeldet, aber nie automatisch übernommen.
+
+### Funktionsumfang
+
+**Notwendig für den Launch**
+
+| # | Funktion | Abnahmekriterien |
+|---|---|---|
+| L1 | Erstübernahme des Shop-Bestands | Alle 741 Einträge sind zugeordnet; keine Artikelnummer doppelt; Widersprüche erscheinen als Befund und werden nicht still korrigiert; zweiter Lauf legt nichts doppelt an. **Implementiert, lokal geprüft.** |
+| L2 | Anmeldung und Rollen | Anmeldung mit E-Mail und Passwort, Zwei-Faktor für Admin und Leitung; Rechte serverseitig geprüft; gesperrte Konten kommen nicht hinein; jede Änderung trägt den Benutzer im Protokoll. |
+| L3 | Produkt- und Steinpflege | Liste mit Suche, Filter nach Befund, Hersteller, Art; Bearbeiten mit Konflikterkennung (wer zuletzt speichert, überschreibt nicht unbemerkt); Massenänderung mit Vorschau. |
+| L4 | Arbeitsliste Befunde | Befunde je Produkt sichtbar, erledigen oder begründet ignorieren; erledigte verschwinden aus der Liste; neue Prüfung nach jeder Änderung. |
+| L5 | Datenblatt hochladen und abgleichen | PDF oder Foto hochladen; gleiche Datei wird erkannt; KI liest Werte aus; Vergleich „im ERP“ ↔ „laut Datenblatt“ je Feld; jede Übernahme einzeln bestätigt und protokolliert; das Datenblatt bleibt am Stein abrufbar. |
+| L6 | Preise pflegen | EK und VK je Produkt und Einheit (m², Stück, Palette), mit Gültig-ab-Datum; alte Preise bleiben erhalten; nur berechtigte Rollen sehen EK. |
+| L7 | Veröffentlichen nach WooCommerce | Knopf „Veröffentlichen“ für Leitung/Admin; Vorschau der Änderungen; Übertragung über Auftragsliste mit Wiederholung; kein Doppelanlegen bei Zeitüberschreitung; Übersicht mit letztem Erfolg und Fehlern; zuerst gegen Staging geprüft. |
+| L8 | Betrieb | Tägliche Datensicherung, getestete Wiederherstellung, HTTPS, Fehlerüberwachung. |
+
+**Sinnvoll danach:** Anfrage → Angebotsentwurf (Webhook aus dem Avada-Formular, Mengen- und Preisrechnung, Status „zu prüfen“) · Referenzen als eigener Bereich im Shop · Umbau Farben/Formate zu Attributen, Hersteller zu Marken · Produkttexte von Claude mit Freigabe.
+
+**Optional:** Bild-Upload mit automatischer Benennung und Alt-Text · Preislisten-Import aus Lieferantendateien · Auswertungen.
+
+---
+
+## 2. Architektur, Datenmodell, Berechtigungen
+
+### Entscheidung
+
+Responsive Webanwendung: **React + TypeScript** im Browser, **Node.js (TypeScript) auf dem Server**, **PostgreSQL 16**. Betrieb als Docker-Container, entweder auf dem Server des Kunden oder bei einem EU-Hoster.
+
+| | Begründung |
+|---|---|
+| Eigener Server statt Supabase | 5 Nutzer, ein Unternehmen, keine Echtzeit-Funktionen nötig. Supabase brächte Row Level Security, Auth-Dienst und Storage mit, die hier mehr Betriebsaufwand als Nutzen bringen, vor allem selbst gehostet. Schlüssel für WooCommerce und Claude müssen ohnehin auf einen Server. |
+| Kein WordPress-Plugin | Preise, Datenblätter und später Angebote gehören nicht in die Website-Installation. Ein Fehler im ERP darf die Website nicht beeinträchtigen und umgekehrt. |
+| PostgreSQL | Transaktionen, Constraints, Versionsprüfung und ein unveränderliches Änderungsprotokoll direkt in der Datenbank. |
+| Node mit TypeScript ohne Build | Node ab 22.18 führt TypeScript direkt aus. Weniger Werkzeuge, gleiche Sprache in Oberfläche und Server. |
+
+**Grenzen:** Wir betreiben Server, Updates und Sicherungen selbst (Christian). Bei einem eigenen Server des Kunden gehören Erreichbarkeit aus dem Internet, Firewall und Stromausfall dazu.
+
+**Alternativen:** Supabase in der EU-Region (weniger Betrieb, dafür Anbieterbindung und RLS-Pflege); WordPress-Plugin (billig, aber eng an die Website gekoppelt). Kosten der Varianten sind noch nicht geprüft und werden vor der Entscheidung über das Hosting mit aktuellen Anbieterpreisen ergänzt.
+
+### Schichten
+
+```
+Browser (React)  ──HTTPS──>  Server (Node, TypeScript)
+                              ├─ Anmeldung, Rollenprüfung
+                              ├─ Fachlogik (Steine, Produkte, Befunde, Preise, Datenblätter)
+                              ├─ Datenbankzugriff (src/db.ts, Transaktion mit Benutzerkontext)
+                              └─ Integrationen: WooCommerce-Worker (Outbox), Claude-API
+                                       │
+                                  PostgreSQL 16  +  Dateiablage für Datenblätter
+```
+
+### Datenmodell (implementiert: `db/migrations/0001_grundschema.sql`)
+
+| Tabelle | Inhalt | Wichtige Regeln |
+|---|---|---|
+| `stein` | Der Klinker selbst: HBR-Code, Hersteller, Herstellungsart, Maße, technische Werte, Herstellertext | HBR-Code eindeutig, Form `HBR 00-000`; Werte nur positiv; Frost F0–F2; Versionszähler |
+| `stein_farbe` | Farben je Stein, Position 0 = Hauptfarbe | nur bekannte Farben |
+| `produkt` | Was im Shop steht: Verblender, Riemchen, Dämm-, Nistklinker; SKU, Woo-ID, Status, Texte | SKU eindeutig, Riemchen enden auf „ R“; je Stein höchstens ein Verblender und ein Riemchen; „freigegeben“ nur mit SKU |
+| `produkt_format` | Formate je Produkt | nur bekannte Formate |
+| `bild`, `produkt_bild`, `referenz_bild` | Bilddateien einmalig, Alt-Text an der Datei; Zuordnung mit Reihenfolge | Woo-Medien-ID eindeutig |
+| `referenz` | Objektfotos, verknüpft mit dem Stein | Code aus dem Shop bleibt erhalten, auch wenn kein Stein passt |
+| `hersteller`, `lieferant`, `farbe`, `format` | Stammdaten | Präfix je Hersteller eindeutig |
+| `datenblatt`, `datenblatt_wert` | Hochgeladene Blätter und ausgelesene Werte mit Entscheidung offen/übernommen/abgelehnt | gleiche Datei (SHA-256) nur einmal |
+| `preis` | EK/VK, netto, EUR, je m²/Stück/Palette, ab Datum | Historie bleibt, kein Überschreiben |
+| `import_lauf`, `befund` | Übernahmen und offene Prüfpunkte | Befunde werden nie gelöscht, nur erledigt/ignoriert |
+| `sync_auftrag` | Ausgang nach WooCommerce (Outbox) | Idempotenzschlüssel eindeutig |
+| `aenderung` | Änderungsprotokoll: wer, wann, was alt, was neu | nur anfügen, Ändern und Löschen gesperrt |
+| `benutzer` | Konten und Rolle | E-Mail eindeutig |
+
+Geldbeträge: `numeric(12,2)` netto in EUR. Zeiten: `timestamptz` (gespeichert in UTC, angezeigt in Europe/Berlin). Gültigkeitsdaten: `date` ohne Uhrzeit.
+
+**Gleichzeitiges Bearbeiten:** Jede Speicherung schreibt mit `WHERE id = … AND version = …`. Hat jemand anders inzwischen gespeichert, ändert sich nichts und die Oberfläche zeigt beide Stände zum Auflösen. (Lokal geprüft.)
+
+**Änderungsprotokoll:** Datenbank-Trigger auf Stein, Produkt, Formaten, Bildern, Referenzen, Preisen, Herstellern und Benutzern. Schreiben ohne Benutzerkontext wird abgelehnt. (Lokal geprüft.) Im Betrieb bekommt die Anwendung eine eigene Datenbankrolle ohne Recht, Trigger zu entfernen.
+
+### Berechtigungsmatrix (Vorschlag, Freigabe durch den Kunden)
+
+| Aktion | Lesen | Pflege | Leitung | Admin |
+|---|:-:|:-:|:-:|:-:|
+| Produkte, Steine, Referenzen ansehen | ✓ | ✓ | ✓ | ✓ |
+| Produkte bearbeiten, Datenblätter hochladen und abgleichen | | ✓ | ✓ | ✓ |
+| Befunde erledigen oder ignorieren | | ✓ | ✓ | ✓ |
+| Zur Prüfung geben | | ✓ | ✓ | ✓ |
+| Massenänderungen | | | ✓ | ✓ |
+| Verkaufspreise ansehen | ✓ | ✓ | ✓ | ✓ |
+| Einkaufspreise ansehen und ändern | | | ✓ | ✓ |
+| Verkaufspreise ändern | | | ✓ | ✓ |
+| Nach WooCommerce veröffentlichen | | | ✓ | ✓ |
+| Benutzer einladen, sperren, Rollen ändern | | | | ✓ |
+| Synchronisation neu anstoßen, Fehler auflösen | | | | ✓ |
+
+Rechte werden auf dem Server geprüft, nicht über ausgeblendete Knöpfe. Rollen ändert nur ein Admin; niemand kann sich selbst befördern.
+
+---
+
+## 3. Schnittstellen und Synchronisation
+
+### Synchronisationsmatrix ERP → WooCommerce
+
+| Feld | Führend | Richtung, Auslöser | Zuordnung | Konfliktregel |
+|---|---|---|---|---|
+| Name, Slug | ERP | ERP → Shop beim Veröffentlichen | Woo-ID, sonst SKU | Slug bestehender Produkte wird nie geändert (SEO) |
+| SKU | ERP | ERP → Shop | Woo-ID | Vor dem Anlegen Suche nach SKU, um Doppelanlage nach Zeitüberschreitung zu verhindern |
+| Art, Herstellungsart, Farben, Formate, Hersteller | ERP | ERP → Shop, zunächst als Kategorien (wie heute), später als Attribute/Marken | Woo-Kategorie-IDs in den Stammdaten | Unbekannte Kategorie → Auftrag stoppt mit Fehler |
+| Bilder, Reihenfolge, Alt-Text | ERP | ERP → Shop | Woo-Medien-ID | Alt-Text wird an der Mediendatei gesetzt |
+| Kurztext, Beschreibung, SEO | ERP | ERP → Shop | Woo-ID | SEO-Plugin im Shop noch zu klären |
+| Technische Daten | ERP | ERP → Shop (Darstellung noch festzulegen) | Woo-ID | – |
+| Status | ERP | freigegeben → veröffentlicht, archiviert → Entwurf im Shop | Woo-ID | Löschen im Shop nur mit Einzelfreigabe |
+| Preise | ERP | **nie** in den Shop (Katalogmodus) | – | – |
+| Neue Shop-Einträge | Shop | Shop → ERP nur über Import „nur neue“ | Woo-ID | ERP-Daten werden nie überschrieben |
+| Abweichungen im Shop | ERP | regelmäßiger Abgleich, nur Bericht | Woo-ID + `date_modified` | Wurde ein Produkt im Shop seit der letzten Übertragung geändert, stoppt der Auftrag und zeigt beide Stände |
+
+### Ablauf Veröffentlichen (geplant)
+
+1. Leitung klickt „Veröffentlichen“. Das ERP zeigt die Änderungen gegenüber dem letzten übertragenen Stand.
+2. In derselben Transaktion entsteht ein `sync_auftrag` mit Schlüssel `produkt:<id>:<version>:<aktion>`. Ein Doppelklick erzeugt keinen zweiten Auftrag.
+3. Ein Worker überträgt nach WooCommerce: begrenzte Wiederholungen mit wachsendem Abstand, Zeitlimit, Rücksicht auf Drosselung. Nach Zeitüberschreitung beim Anlegen sucht er zuerst per SKU, ob das Produkt schon existiert.
+4. Erfolg erst nach bestätigter Antwort des Shops; die Woo-ID wird gespeichert. Dauerhafte Fehler landen sichtbar in der Übersicht.
+5. Mehr als 25 Produkte auf einmal nur mit Probelauf und zusätzlicher Bestätigung.
+
+### Ablauf Datenblatt-Abgleich (geplant)
+
+1. Pflege lädt PDF oder Foto am Stein hoch (max. 20 MB, PDF/JPG/PNG/WebP, Typ wird am Inhalt geprüft).
+2. Der Server prüft die Prüfsumme: gleiche Datei = bekanntes Blatt.
+3. Der Server schickt die Seiten an die Claude-API (Schlüssel nur auf dem Server). Inhalte aus dem Blatt gelten als Daten, nie als Anweisung.
+4. Ergebnis landet in `datenblatt_wert`, jeder Wert mit Entscheidung „offen“.
+5. Vergleichsansicht: Feld · im ERP · laut Datenblatt · gleich/abweichend/neu. Übernahme je Feld, mit Versionsprüfung und Protokoll.
+
+### Bestandsdatei (Eingang heute)
+
+Export „Bestand exportieren“ aus der Produktstation (öffentliche Store-API). Enthält keine Entwürfe und nur gekürzte Texte. Für die endgültige Übernahme wird die REST-API mit Schlüssel genutzt.
+
+---
+
+## 4. Einrichtung und Befehle
+
+Siehe `README.md`. Kurz: `npm ci`, `npm test`, `npm run migrate`, `node scripts/import-bestand.ts <datei> [--probelauf|--nur-neue] [--bericht <ordner>]`.
+
+Geheimnisse (`WOO_CONSUMER_KEY`, `WOO_CONSUMER_SECRET`, `ANTHROPIC_API_KEY`, Datenbank-Passwort) liegen nur in der Serverkonfiguration, getrennt für Staging und Produktion, nie im Repository oder im Chat.
+
+---
+
+## 5. Tests und Ergebnisse
+
+Stand 02.11.2026, lokal geprüft:
+
+| Prüfung | Ergebnis |
+|---|---|
+| 13 automatische Tests (`npm test`) | bestanden |
+| TypeScript-Prüfung | ohne Fehler |
+| Migration auf leerer Datenbank, zweimal | bestanden, zweiter Lauf ohne Wirkung |
+| Erstübernahme echter Bestand (741 Einträge) in PGlite **und** PostgreSQL 16 | identisches Ergebnis |
+| Zweiter Import | bricht mit klarer Meldung ab; `--nur-neue` legt nichts an |
+| Fehler mitten im Import | nichts übernommen (Transaktion) |
+| Konflikt beim gleichzeitigen Speichern | spätere Speicherung mit alter Version ändert nichts |
+| Änderungsprotokoll | nur geänderte Felder, mit Benutzer; Ändern/Löschen gesperrt |
+| CSV-Export | Formeln werden entschärft |
+
+**Ergebnis der Erstübernahme:** 314 Steine (236 mit Verblender und Riemchen), 289 Verblender, 267 Riemchen, 6 Nistklinker, 179 Referenzen, 1.931 Bilddateien in 3.480 Verwendungen, 2.195 Befunde. Details im Abgleichbericht.
+
+**Bekannte Einschränkungen:** Noch keine Oberfläche, keine Anmeldung, keine Verbindung zum Shop. Die Schema-Tests laufen gegen PGlite; der Import wurde zusätzlich gegen PostgreSQL 16 geprüft.
+
+---
+
+## 6. Betrieb (geplant)
+
+- Umgebungen: Entwicklung (lokal), Staging (eigene Datenbank, verbunden mit einer Staging-Kopie des Shops), Produktion. Staging darf nie den Live-Shop schreiben.
+- Datensicherung: nächtlicher Datenbank-Dump plus Datenblatt-Ordner, außerhalb des Servers, 30 Tage. Ziel: höchstens 24 h Datenverlust, Wiederherstellung in unter 4 h. Wiederherstellung wird vor dem Launch einmal tatsächlich durchgeführt.
+- Überwachung: Erreichbarkeit, Fehlerprotokoll ohne personenbezogene Daten, Alarm bei hängenden oder fehlgeschlagenen Sync-Aufträgen.
+- Release-Rücknahme: Migrationen nur vorwärtskompatibel; ein Zurücksetzen des Codes macht bereits übertragene Shop-Änderungen nicht rückgängig.
+- Betreuung: Christian. Eskalation und Wartungsfenster mit dem Kunden zu vereinbaren.
+
+---
+
+## 7. Offene Entscheidungen, Risiken, Launch-Checkliste
+
+### Offen
+
+| # | Frage | Wer |
+|---|---|---|
+| 1 | Server des Kunden: Betriebssystem, Standort (Büro/Rechenzentrum), aus dem Internet erreichbar, Docker möglich, wer wartet ihn, Sicherung | Kunde / IT |
+| 2 | WooCommerce-API-Schlüssel und Staging-Kopie des Shops | Christian mit Alfahosting-Zugang |
+| 3 | Hersteller der Präfixe 17, 18, 22, 23, 24, 25, 27 (57 Steine) | Kunde |
+| 4 | Doppelte Codes HBR 12-122, 13-130, 17-121 R; ggf. 14-100/14-101 | Kunde |
+| 5 | Rollen und Einkaufspreis-Sicht je Person | Kunde |
+| 6 | Herstellungsart HBR 14-116 und 16-104 (Verblender und Riemchen widersprechen sich) | Kunde |
+| 7 | Zielmodell im Shop (Attribute, Marken, Referenzen) und SEO-Plugin | Christian / Kunde |
+| 8 | Budget und Termin | Christian / Kunde |
+
+### Risiken
+
+| Risiko | Gegenmaßnahme |
+|---|---|
+| Doppelte Pflege in WordPress und ERP | Regel „nur im ERP ändern“, Abweichungsbericht, Konfliktstopp beim Veröffentlichen |
+| Fehlerhafte Massenveröffentlichung | Probelauf, Schwellen, Staging-Test, Woo-ID-Zuordnung statt Name |
+| Kategorie-Umbau kostet Sichtbarkeit | URLs bleiben, Weiterleitungsplan, Search Console vorher prüfen |
+| Datenblätter falsch ausgelesen | jeder Wert einzeln bestätigt, Original bleibt abrufbar |
+| Eigener Server ohne Wartung | Betriebsverantwortung klären, sonst Hosting beim EU-Anbieter |
+| Schlüsselverlust | Schlüssel nur serverseitig, getrennt je Umgebung, Rotation dokumentiert |
+
+### Launch-Checkliste
+
+- [ ] Kernabläufe L1–L7 in Staging geprüft
+- [ ] Rechte je Rolle direkt über die Schnittstelle getestet (auch verweigerte Zugriffe)
+- [ ] Erstübernahme mit vollständigen Daten über die REST-API
+- [ ] Wiederherstellung aus Sicherung durchgeführt
+- [ ] Keine bekannten kritischen Sicherheitslücken
+- [ ] Datenschutz: Auftragsverarbeitung mit Hoster und Anthropic geprüft, Verzeichnis ergänzt
+- [ ] Betriebsverantwortung und Eskalation schriftlich vereinbart

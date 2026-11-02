@@ -1,0 +1,25 @@
+{
+  "name": "klinkerhandel-erp",
+  "version": "1.0.0",
+  "description": "ERP Klinkerhandel Harbecke Rhede – Produktpflege",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "migrate": "node scripts/migrate.ts",
+    "import:bestand": "node scripts/import-bestand.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.14",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  }
+}
