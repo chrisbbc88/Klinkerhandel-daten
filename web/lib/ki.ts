@@ -84,7 +84,33 @@ export function medienTyp(b: Blob, name: string): string | null {
 
 export class KiFehler extends Error {}
 
-/** Ruft die Claude-API direkt aus dem Browser auf. */
+/** Allgemeiner Aufruf mit strukturierter Antwort (JSON-Schema). Direkt aus dem Browser. */
+export async function kiStrukturiert<T>(schluessel: string, modell: string, system: string, inhalt: unknown[], schemaObj: unknown, signal?: AbortSignal, maxTokens = 4000): Promise<{ roh: T; kosten: { ein: number; aus: number } }> {
+  let antwort: Response;
+  try {
+    antwort = await fetch(API_URL, {
+      method: "POST", signal,
+      headers: { "content-type": "application/json", "x-api-key": schluessel, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model: modell, max_tokens: maxTokens, system, messages: [{ role: "user", content: inhalt }], output_config: { format: { type: "json_schema", schema: schemaObj } } }),
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;
+    throw new KiFehler("Keine Verbindung zur Claude-API. Internetverbindung prüfen.");
+  }
+  const j = await antwort.json().catch(() => null);
+  if (!antwort.ok) {
+    if (antwort.status === 401) throw new KiFehler("Der API-Schlüssel wurde abgelehnt. Bitte unter Einstellungen › Allgemein prüfen.");
+    if (antwort.status === 429) throw new KiFehler("Zu viele Anfragen oder Ausgabenlimit erreicht. Bitte später erneut versuchen.");
+    throw new KiFehler(`Die Claude-API meldet: ${j?.error?.message ?? `HTTP ${antwort.status}`}`);
+  }
+  if (j.stop_reason === "refusal") throw new KiFehler("Der Inhalt wurde nicht ausgewertet.");
+  if (j.stop_reason === "max_tokens") throw new KiFehler("Die Antwort war zu lang. Bitte kürzeren Inhalt versuchen.");
+  const text = (j.content ?? []).find((c: any) => c.type === "text")?.text;
+  try { return { roh: JSON.parse(text) as T, kosten: { ein: j.usage?.input_tokens ?? 0, aus: j.usage?.output_tokens ?? 0 } }; }
+  catch { throw new KiFehler("Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen."); }
+}
+
+/** Datenblatt auslesen. */
 export async function kiAuslesen(datei: Blob, name: string, schluessel: string, modell: string, d: Daten, oberflaechen: string[], signal?: AbortSignal): Promise<{ roh: KiRoh; kosten: { ein: number; aus: number } }> {
   const typ = medienTyp(datei, name);
   if (!typ) throw new KiFehler("Bitte ein PDF oder ein Foto (JPG, PNG, WEBP) wählen.");
@@ -93,35 +119,7 @@ export async function kiAuslesen(datei: Blob, name: string, schluessel: string, 
   const quelle = typ === "application/pdf"
     ? { type: "document", source: { type: "base64", media_type: typ, data: daten } }
     : { type: "image", source: { type: "base64", media_type: typ, data: daten } };
-  let antwort: Response;
-  try {
-    antwort = await fetch(API_URL, {
-      method: "POST", signal,
-      headers: { "content-type": "application/json", "x-api-key": schluessel, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({
-        model: modell, max_tokens: 4000,
-        system: anweisung(d),
-        messages: [{ role: "user", content: [quelle, { type: "text", text: `Datenblatt „${name}“ auslesen.` }] }],
-        output_config: { format: { type: "json_schema", schema: schema(d, oberflaechen) } },
-      }),
-    });
-  } catch (e) {
-    if ((e as Error).name === "AbortError") throw e;
-    throw new KiFehler("Keine Verbindung zur Claude-API. Internetverbindung prüfen.");
-  }
-  const j = await antwort.json().catch(() => null);
-  if (!antwort.ok) {
-    const msg = j?.error?.message ?? `HTTP ${antwort.status}`;
-    if (antwort.status === 401) throw new KiFehler("Der API-Schlüssel wurde abgelehnt. Bitte unter Einstellungen › Allgemein prüfen.");
-    if (antwort.status === 429) throw new KiFehler("Zu viele Anfragen oder Ausgabenlimit erreicht. Bitte später erneut versuchen.");
-    throw new KiFehler(`Die Claude-API meldet: ${msg}`);
-  }
-  if (j.stop_reason === "refusal") throw new KiFehler("Das Dokument wurde nicht ausgewertet.");
-  if (j.stop_reason === "max_tokens") throw new KiFehler("Die Antwort war zu lang. Bitte eine kürzere Datei (nur die Seiten zum Stein) versuchen.");
-  const text = (j.content ?? []).find((c: any) => c.type === "text")?.text;
-  let roh: KiRoh;
-  try { roh = JSON.parse(text); } catch { throw new KiFehler("Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen."); }
-  return { roh, kosten: { ein: j.usage?.input_tokens ?? 0, aus: j.usage?.output_tokens ?? 0 } };
+  return kiStrukturiert<KiRoh>(schluessel, modell, anweisung(d), [quelle, { type: "text", text: `Datenblatt „${name}“ auslesen.` }], schema(d, oberflaechen), signal);
 }
 
 /** Ein bestätigbarer Vorschlag. ziel: wohin der Wert beim Übernehmen geht. */

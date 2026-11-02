@@ -2,7 +2,7 @@
 import { z } from "./store.ts";
 import { bewerte, type ProduktBewertung } from "../lib/pruefung.ts";
 import { exportKandidaten } from "../lib/woo.ts";
-import type { Bild, Hersteller, Kontakt, Produkt, Stein } from "../lib/modell.ts";
+import { kontaktAnzeige, type Bild, type Hersteller, type Kontakt, type Produkt, type Stein } from "../lib/modell.ts";
 
 export interface Abgeleitet {
   rev: number; daten: unknown;
@@ -38,7 +38,7 @@ export function ab(): Abgeleitet {
 
 export const steinVon = (p: Produkt) => (p.stein_id ? ab().steine.get(p.stein_id) : undefined);
 export const herstellerName = (id: number | null | undefined) => (id ? ab().hersteller.get(id)?.name ?? "" : "");
-export const kontaktName = (k: Kontakt | undefined) => (k ? k.firma || [k.vorname, k.nachname].filter(Boolean).join(" ") || k.email || "(ohne Namen)" : "–");
+export const kontaktName = (k: Kontakt | undefined) => kontaktAnzeige(k);
 
 const TABELLE_LABEL: Record<string, string> = { produkte: "Produkt", steine: "Stein", kontakte: "Kontakt", vorgaenge: "Vorgang", bilder: "Bild", referenzen: "Referenz", hinweise: "Hinweis", hersteller: "Hersteller", system: "System", einstellungen: "Einstellungen" };
 const FELD_LABEL: Record<string, string> = {

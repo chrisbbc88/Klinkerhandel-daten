@@ -86,7 +86,14 @@ export interface Position {
 }
 export interface Vorgang extends Basis {
   nummer: string; kontakt_id: number | null; status: VorgangStatus; datum: string;
-  quelle: "telefon" | "email" | "website" | "vor_ort" | "sonstige";
+  quelle: "telefon" | "email" | "website" | "wunschliste" | "vor_ort" | "sonstige";
+  lieferort_strasse: string;
+  statusverlauf: { status: VorgangStatus; zeit: string; von: string }[];
+  /** Prüfliste vor dem Versand: Schlüssel → wer/wann abgehakt */
+  pruefung: Record<string, { von: string; zeit: string }>;
+  aufgaben: { id: number; text: string; erledigt_von: string | null; erledigt_am: string | null }[];
+  verlustgrund: string;
+  eingang_text: string;
   lieferort_plz: string; lieferort_ort: string; wunschtermin: string; betreff: string;
   positionen: Position[]; fracht_netto: number; notiz: string; angebot_am: string | null;
 }
@@ -98,6 +105,8 @@ export interface Einstellungen {
   angebot: { mwst_proz: number; verschnitt_proz: number; gueltig_tage: number; nummer_praefix: string; fusstext: string };
   bearbeiter: string[];
   ki: { modell: string };
+  /** Fracht nach PLZ: erste Ziffern der PLZ (kommagetrennt), Betrag netto, frachtfrei ab m² */
+  fracht: { zonen: { name: string; plz: string; betrag: number; frei_ab_m2: number | null }[]; sonst_betrag: number | null };
 }
 
 export interface Daten {
@@ -120,7 +129,7 @@ export const ART: Record<ProduktArt, string> = { verblender: "Verblender", riemc
 export const STATUS: Record<ProduktStatus, string> = { entwurf: "Entwurf", pruefung: "Zur Prüfung", freigegeben: "Freigegeben", archiviert: "Archiviert" };
 export const VORGANG_STATUS: Record<VorgangStatus, string> = {
   neu: "Neu", in_bearbeitung: "In Bearbeitung", angebot_erstellt: "Angebot erstellt", gesendet: "Gesendet",
-  angenommen: "Angenommen", abgelehnt: "Abgelehnt", archiviert: "Archiviert",
+  angenommen: "Gewonnen", abgelehnt: "Verloren", archiviert: "Archiviert",
 };
 /** Erlaubte Statuswechsel bei Vorgängen. */
 export const VORGANG_UEBERGANG: Record<VorgangStatus, VorgangStatus[]> = {
@@ -146,6 +155,10 @@ export const STANDARD_EINSTELLUNGEN: Einstellungen = {
   angebot: { mwst_proz: 19, verschnitt_proz: 5, gueltig_tage: 30, nummer_praefix: "AN", fusstext: "Alle Preise netto zzgl. gesetzlicher MwSt. Lieferzeit nach Verfügbarkeit beim Werk." },
   bearbeiter: ["Klaus", "Tobi", "Sven", "Assistenz", "Christian"],
   ki: { modell: "claude-sonnet-5-5" },
+  fracht: { zonen: [
+    { name: "Nahbereich (Beispiel)", plz: "463,464,465,466,467", betrag: 0, frei_ab_m2: null },
+    { name: "NRW (Beispiel)", plz: "4,5,32,33,57,58,59", betrag: 95, frei_ab_m2: 150 },
+  ], sonst_betrag: null },
 };
 
 const leer = { bezeichnung_hersteller: "", artikelnr_hersteller: "", oberflaechen: [] as string[], laenge_mm: null, breite_mm: null, hoehe_mm: null,
@@ -260,6 +273,45 @@ export function normalisieren(d: Daten): Daten {
   d.einstellungen = { ...structuredClone(STANDARD_EINSTELLUNGEN), ...d.einstellungen, ki: { ...STANDARD_EINSTELLUNGEN.ki, ...(d.einstellungen?.ki ?? {}) } };
   for (const h of d.hersteller) h.im_shop_anzeigen ??= true;
   for (const p of d.produkte) p.hersteller_im_shop ??= "standard";
+  d.einstellungen.fracht ??= structuredClone(STANDARD_EINSTELLUNGEN.fracht);
+  for (const v of d.vorgaenge) {
+    v.lieferort_strasse ??= ""; v.pruefung ??= {}; v.aufgaben ??= []; v.verlustgrund ??= ""; v.eingang_text ??= "";
+    v.statusverlauf ??= [{ status: "neu", zeit: v.erstellt_am, von: v.geaendert_von }];
+  }
   for (const r of d.referenzen) { r.ort ??= ""; r.beschreibung ??= ""; r.zuletzt_exportiert_version ??= r.woo_id ? r.version : null; }
   return d;
+}
+
+export const VERLUSTGRUENDE = ["Preis zu hoch", "Lieferzeit", "Kunde hat sich nicht gemeldet", "Anderer Anbieter", "Projekt verschoben/abgesagt", "Produkt nicht passend", "Sonstiges"];
+
+/** Prüfliste vor dem Versand eines Angebots. */
+export const PRUEFSCHRITTE: [string, string][] = [
+  ["kunde", "Kundendaten vollständig und plausibel"],
+  ["lieferung", "Lieferadresse und Lieferzeitraum geklärt"],
+  ["mengen", "Mengen, Verschnitt und Stückzahlen geprüft"],
+  ["preise", "Preise und Rabatte geprüft"],
+  ["fracht", "Fracht/Lieferzuschlag geprüft"],
+  ["verfuegbarkeit", "Verfügbarkeit/Lieferzeit beim Lieferanten geklärt"],
+];
+/** Aufgaben, die nach einem gewonnenen Angebot angelegt werden. */
+export const AUFGABEN_GEWONNEN = [
+  "Auftragsbestätigung an den Kunden senden",
+  "Ware beim Lieferanten bestellen",
+  "Liefertermin mit Kunde und Spedition abstimmen",
+  "Anzahlung/Zahlungseingang prüfen",
+  "Lieferung bestätigt, Rechnung gestellt",
+];
+
+/** Anzeigename einer Person/Firma: bei Kunden zuerst die Person, sonst die Firma. */
+export function kontaktAnzeige(k: Pick<Kontakt, "typ" | "firma" | "vorname" | "nachname" | "email"> | undefined): string {
+  if (!k) return "–";
+  const person = [k.vorname, k.nachname].filter(Boolean).join(" ");
+  return (k.typ === "kunde" || k.typ === "partner" ? person || k.firma : k.firma || person) || k.email || "(ohne Namen)";
+}
+/** Kundenzeile für Anfragen/Angebote: „Vorname Nachname · Firma · Lieferort“, fehlende Teile als –. */
+export function kundenZeile(k: Kontakt | undefined, v?: Pick<Vorgang, "lieferort_plz" | "lieferort_ort">): string {
+  if (!k) return "– · – · –";
+  const person = [k.vorname, k.nachname].filter(Boolean).join(" ");
+  const ort = v ? [v.lieferort_plz, v.lieferort_ort].filter(Boolean).join(" ") : "";
+  return [person || "–", k.firma || "–", ort || [k.plz, k.ort].filter(Boolean).join(" ") || "–"].join(" · ");
 }

@@ -5,6 +5,8 @@ import { Karte, Seitenkopf, Icon, relZeit, initialen, geheZu, Score } from "./ui
 import { REGELN } from "../lib/pruefung.ts";
 import { ART, STATUS, VORGANG_STATUS, type ProduktStatus, type VorgangStatus } from "../lib/modell.ts";
 import { summen, euro } from "../lib/angebot.ts";
+import { pipelineKennzahlen } from "../lib/anfrage.ts";
+import { kundenZeile, type Vorgang } from "../lib/modell.ts";
 
 const STATUS_FARBE: Record<ProduktStatus, string> = { freigegeben: "var(--ok)", pruefung: "#d39a2c", entwurf: "#8b929a", archiviert: "#cfd4d8" };
 
@@ -110,9 +112,7 @@ export function Dashboard() {
         <p class="muted klein" style={{ marginBottom: 0 }}>Hersteller für HBR-Präfixe ohne Zuordnung legen Sie unter Einstellungen › Stammdaten fest – alle Steine mit diesem Präfix werden dann zugeordnet.</p>
       </Karte>
       <div class="raster" style={{ alignContent: "start" }}>
-        <Karte titel="Anfragen & Angebote" rechts={<a class="btn klein" href="#/angebote">Alle</a>}>
-          {pipeline.map((x) => <div class="leiste klickbar" style={{ gridTemplateColumns: "1fr 48px" }} onClick={() => geheZu(`angebote?status=${x.s}`)}><span>{VORGANG_STATUS[x.s]}</span><span class="num">{x.n}</span></div>)}
-        </Karte>
+        <HeuteZuTun />
         <Karte titel="Letzte Änderungen" ohnePadding rechts={<span class="muted klein">alle Bearbeiter</span>}>
           <ul class="feed">{feed.map((e) => { const r = aenderungZeile(e); return <li>
             <span class="wer" title={e.von}>{initialen(e.von)}</span>
@@ -126,3 +126,24 @@ export function Dashboard() {
 }
 
 
+
+function HeuteZuTun() {
+  const d = z.daten, a = ab();
+  const kz = pipelineKennzahlen(d);
+  const neu = d.vorgaenge.filter((v) => v.status === "neu");
+  const zurPruefung = d.vorgaenge.filter((v) => v.status === "angebot_erstellt");
+  const inArbeit = d.vorgaenge.filter((v) => v.status === "in_bearbeitung");
+  const aufgaben = d.vorgaenge.filter((v) => v.status === "angenommen" && v.aufgaben.some((x) => !x.erledigt_am));
+  const zeilen: [string, Vorgang[], string][] = [
+    ["Neue Anfragen bearbeiten", neu, "info"], ["Entwürfe fertigstellen", inArbeit, "warn"], ["Angebote prüfen und versenden", zurPruefung, "dunkel"],
+    ["Nachfassen (über 7 Tage versendet)", kz.nachfassen, "warn"], ["Gewonnen – offene Aufgaben", aufgaben, "ok"],
+  ];
+  const leer = zeilen.every(([, l]) => !l.length);
+  return <Karte titel="Heute zu tun" rechts={<a class="btn klein" href="#/angebote">Pipeline</a>} ohnePadding>
+    {leer ? <p class="muted karte-inhalt" style={{ margin: 0 }}>Nichts offen bei Anfragen und Angeboten.</p> :
+      <ul class="feed">{zeilen.filter(([, l]) => l.length).map(([titel, l, cls]) => <li style={{ gridTemplateColumns: "1fr auto", alignItems: "start" }}>
+        <span><b style={{ fontWeight: 500 }}>{titel}</b><div class="klein">{l.slice(0, 4).map((v) => <a href={`#/angebote/${v.id}`} style={{ display: "block", color: "var(--muted)", textDecoration: "none" }}>{v.nummer} · {kundenZeile(a.kontakte.get(v.kontakt_id ?? -1), v)}</a>)}{l.length > 4 && <span class="faint">… {l.length - 4} weitere</span>}</div></span>
+        <span class={`marke ${cls}`}>{l.length}</span>
+      </li>)}</ul>}
+  </Karte>;
+}

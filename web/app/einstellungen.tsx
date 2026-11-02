@@ -70,6 +70,23 @@ function Allgemein() {
         <Feld label="Fußtext" klasse="breit"><textarea value={e.angebot.fusstext} onInput={(x) => an({ fusstext: (x.target as HTMLTextAreaElement).value })} /></Feld>
       </div>
     </Karte>
+    <Karte titel="Fracht nach PLZ" rechts={<span class="muted klein">wird bei neuen Anfragen automatisch eingesetzt</span>}>
+      <table class="t">
+        <thead><tr><th>Zone</th><th>PLZ beginnt mit</th><th style={{ width: 90 }}>€ netto</th><th style={{ width: 90 }}>frei ab m²</th><th></th></tr></thead>
+        <tbody>{e.fracht.zonen.map((zo, i) => { const setZ = (x: Partial<typeof zo>) => setE({ ...e, fracht: { ...e.fracht, zonen: e.fracht.zonen.map((y, j) => (j === i ? { ...y, ...x } : y)) } }); return <tr>
+          <td><Text wert={zo.name} setze={(v) => setZ({ name: v })} aria-label="Zone" /></td>
+          <td><Text wert={zo.plz} setze={(v) => setZ({ plz: v.replace(/[^\d,\s]/g, "") })} placeholder="z. B. 46,47,48" aria-label="PLZ-Anfänge" /></td>
+          <td><Zahl wert={zo.betrag} setze={(v) => setZ({ betrag: v ?? 0 })} aria-label="Betrag" /></td>
+          <td><Zahl wert={zo.frei_ab_m2} setze={(v) => setZ({ frei_ab_m2: v })} aria-label="frachtfrei ab" /></td>
+          <td><button class="btn link klein" onClick={() => setE({ ...e, fracht: { ...e.fracht, zonen: e.fracht.zonen.filter((_, j) => j !== i) } })}>×</button></td>
+        </tr>; })}</tbody>
+      </table>
+      <div class="knopfreihe" style={{ marginTop: 10 }}>
+        <button class="btn klein" onClick={() => setE({ ...e, fracht: { ...e.fracht, zonen: [...e.fracht.zonen, { name: "Neue Zone", plz: "", betrag: 0, frei_ab_m2: null }] } })}>Zone hinzufügen</button>
+        <span class="muted klein">Übrige PLZ:</span><span style={{ width: 90 }}><Zahl wert={e.fracht.sonst_betrag} setze={(v) => setE({ ...e, fracht: { ...e.fracht, sonst_betrag: v } })} aria-label="Fracht übrige PLZ" /></span><span class="muted klein">€ (leer = von Hand)</span>
+      </div>
+      <p class="muted klein" style={{ marginBottom: 0 }}>Die beiden Zonen sind Beispiele – bitte die echten Frachtsätze eintragen. Der längste passende PLZ-Anfang gewinnt.</p>
+    </Karte>
     <div class="knopfreihe" style={{ alignSelf: "end" }}>
       <button class="btn primaer" disabled={!geaendert || z.nurLesen} onClick={speichern}><Icon n="sichern" />Einstellungen speichern</button>
       <button class="btn" disabled={!geaendert} onClick={() => setE(structuredClone(d.einstellungen))}>Verwerfen</button>

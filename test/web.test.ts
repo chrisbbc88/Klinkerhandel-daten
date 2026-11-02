@@ -250,3 +250,82 @@ test("KI-Datenblatt: Schema und Prüfung der Antwort", async () => {
   assert.equal(patch.hersteller_quelle, "datenblatt");
   assert.equal((patch as any).formate, undefined); // Formate gehören zum Produkt
 });
+
+test("Anfrage: Datenqualität erkennt Lücken und Fake-Verdacht", async () => {
+  const { datenqualitaet } = await import("../web/lib/anfrage.ts");
+  const { kontaktLeer } = await import("../web/lib/modell.ts");
+  const k = (x: object) => ({ ...kontaktLeer(1, "kunde", "", T0, "t"), ...x });
+  assert.equal(datenqualitaet(k({ vorname: "Anna", nachname: "Meier", email: "anna.meier@web.de", telefon: "02872 12345", strasse: "Hauptstr. 1", plz: "46414", ort: "Rhede" })).stufe, "ok");
+  const leer = datenqualitaet(k({ nachname: "Meier" }));
+  assert.equal(leer.stufe, "unvollstaendig");
+  assert.ok(leer.fehlt.includes("E-Mail oder Telefon"));
+  assert.equal(datenqualitaet(k({ vorname: "Test", nachname: "Test", email: "x@mailinator.com", plz: "46414", ort: "Rhede", strasse: "a" })).stufe, "verdacht");
+  assert.equal(datenqualitaet(k({ nachname: "Meier", email: "a@b.de", plz: "464", ort: "Rhede", strasse: "a" })).stufe, "pruefen");
+});
+
+test("Anfrage: Fracht nach PLZ, längstes Präfix gewinnt, frachtfrei ab m²", async () => {
+  const { frachtFuer } = await import("../web/lib/anfrage.ts");
+  const d = structuredClone(basis);
+  assert.equal(frachtFuer(d, "46414", 50)!.betrag, 0);              // Nahbereich 464
+  assert.equal(frachtFuer(d, "44135", 50)!.betrag, 95);             // NRW 4
+  assert.equal(frachtFuer(d, "44135", 200)!.betrag, 0);             // frachtfrei ab 150 m²
+  assert.equal(frachtFuer(d, "80331", 50), null);                   // keine Zone
+});
+
+test("Anfrage: Statuswechsel mit Prüfliste, Verlustgrund und Aufgaben", async () => {
+  const { statusWechsel, pipelineKennzahlen } = await import("../web/lib/anfrage.ts");
+  const { normalisieren, PRUEFSCHRITTE } = await import("../web/lib/modell.ts");
+  const { positionAusProdukt } = await import("../web/lib/angebot.ts");
+  const d = normalisieren(structuredClone(basis));
+  const p = d.produkte[0];
+  d.vorgaenge.push({ id: 7, version: 1, erstellt_am: "2026-11-02T08:00:00.000Z", geaendert_am: T0, geaendert_von: "Tobi", nummer: "AN-2026-TO-001", kontakt_id: null, status: "neu", datum: "2026-11-02",
+    quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 100), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
+  normalisieren(d);
+  assert.equal(statusWechsel(d, 7, "gesendet", "Tobi").ok, false); // nicht vorgesehen von neu
+  assert.ok(statusWechsel(d, 7, "angebot_erstellt", "Tobi", { jetzt: "2026-11-02T08:10:00.000Z" }).ok);
+  const r = statusWechsel(d, 7, "gesendet", "Tobi");
+  assert.equal(r.ok, false); assert.match(r.fehler!, /prüfen/);
+  const v = d.vorgaenge.find((x) => x.id === 7)!;
+  v.pruefung = Object.fromEntries(PRUEFSCHRITTE.map(([k]) => [k, { von: "Klaus", zeit: T0 }]));
+  assert.ok(statusWechsel(d, 7, "gesendet", "Tobi").ok);
+  assert.equal(statusWechsel(d, 7, "abgelehnt", "Tobi").ok, false); // Grund fehlt
+  assert.ok(statusWechsel(d, 7, "angenommen", "Tobi").ok);
+  assert.equal(d.vorgaenge.find((x) => x.id === 7)!.aufgaben.length, 5);
+  const kz = pipelineKennzahlen(d);
+  assert.equal(kz.quote, 1);
+  assert.ok(Math.abs(kz.zeitBisAngebotStd! - 1 / 6) < 0.01);
+});
+
+test("Anfrage aus E-Mail: Kontakt erkennen, Positionen zuordnen, Vorgang anlegen", async () => {
+  const { anfragePlanen, anfrageAnlegen, emlText } = await import("../web/lib/anfrage.ts");
+  const { normalisieren } = await import("../web/lib/modell.ts");
+  const d = normalisieren(structuredClone(basis));
+  const p = d.produkte.find((x) => x.sku === "HBR 11-110 R")!;
+  p.preise.push({ id: 1, preisart: "vk", betrag: 49.9, einheit: "m2", gueltig_ab: "2026-01-01", quelle: "manuell", erfasst_von: "x", erfasst_am: T0 });
+  const roh = {
+    kunde: { anrede: "Frau", vorname: "Anna", nachname: "Meier", firma: "", email: "anna.meier@web.de", telefon: "0172 1234567", strasse: "Hauptstr. 1", plz: "46414", ort: "Rhede", land: "" },
+    lieferung: { strasse: "", plz: "", ort: "", zeitraum: "KW 14", abholung: false },
+    positionen: [{ artikel: "HBR 11 - 110", bezeichnung: "Riemchen", art: "riemchen", flaeche_m2: 80, menge_stk: null, eckriemchen: true },
+      { artikel: "", bezeichnung: "Fugenmörtel grau", art: "unbekannt", flaeche_m2: null, menge_stk: null, eckriemchen: null }],
+    bauvorhaben: "Neubau EFH", nachricht: "Bitte Angebot", unsicher: "",
+  } as any;
+  const plan = anfragePlanen(d, roh);
+  assert.equal(plan.kontakt.vorhanden, null);
+  assert.equal(plan.positionen[0].sku, "HBR 11-110 R");
+  assert.equal(plan.positionen[0].ep_netto_m2, 49.9);
+  assert.equal(plan.positionen[1].gefunden, false);
+  assert.equal(plan.fracht!.betrag, 0);
+  assert.equal(plan.lieferung.ort, "Rhede");
+  const id = anfrageAnlegen(d, plan, roh, "wunschliste", "Text", "Assistenz");
+  const v = d.vorgaenge.find((x) => x.id === id)!;
+  assert.equal(v.status, "in_bearbeitung");
+  assert.equal(v.wunschtermin, "KW 14");
+  assert.ok(v.notiz.includes("bitte prüfen"));
+  // zweite Anfrage derselben Person → Kontakt wird erkannt, nicht doppelt angelegt
+  const anzahl = d.kontakte.length;
+  const plan2 = anfragePlanen(d, { ...roh, kunde: { ...roh.kunde, email: "ANNA.MEIER@web.de" } });
+  assert.ok(plan2.kontakt.vorhanden);
+  anfrageAnlegen(d, plan2, roh, "email", "", "Assistenz");
+  assert.equal(d.kontakte.length, anzahl);
+  assert.match(emlText("From: Anna <a@b.de>\nSubject: Anfrage\nContent-Transfer-Encoding: quoted-printable\n\nGr=C3=BC=C3=9Fe aus Rhede"), /Grüße aus Rhede/);
+});

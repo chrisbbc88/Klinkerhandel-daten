@@ -150,6 +150,29 @@ Module der Testversion: Dashboard (Kennzahlen, „Wo ansetzen“, Hersteller, St
 
 Fachregeln, die die Testversion durchsetzt: Hersteller ist optional (Empfehlung, keine Pflicht); Referenzen nur mit Stein, Bild und Rubrik freigeben; Freigabe nur ohne Pflichtlücken; Steindaten gelten für Verblender und Riemchen gemeinsam; Herstellerwechsel zieht beide Produkte mit; Produkte mit Shop-ID werden archiviert statt gelöscht; Preise werden mit Gültigkeitsdatum ergänzt, nicht überschrieben; Angebote sind ab „Gesendet“ gesperrt; Statuswechsel nur entlang der festgelegten Folge (Neu → In Bearbeitung → Angebot erstellt → Gesendet → Angenommen/Abgelehnt → Archiviert).
 
+### Anfrage → Angebot (Testversion ab v0.4.0)
+
+Ziel des Kunden: Angebot in 10 Minuten statt 5–6 Tagen, immer mit menschlicher Prüfung.
+
+1. **Eingang:** manuell („Neue Anfrage“) oder „Anfrage aus E-Mail“ (Text einfügen / .eml laden → KI liest Kunde, Lieferadresse, Zeitraum, Artikel, Flächen).
+2. **Kontakt:** Abgleich über E-Mail oder Telefonnummer; vorhandene Kontakte werden nur ergänzt, nie überschrieben. Datenqualität: vollständig / unvollständig / prüfen / Verdacht auf Fake.
+3. **Entwurf:** Positionen mit VK je m², Verschnitt, Stückzahl aus Bedarf; Fracht nach PLZ-Zone; Hinweise zu allem, was fehlt. Status „In Bearbeitung“.
+4. **Prüfung:** 6-Punkte-Prüfliste mit Name und Zeit; „versendet“ erst danach und nur mit Preisen. Änderungen an Positionen oder Lieferung setzen die Prüfung zurück.
+5. **Versand:** Druck/PDF und E-Mail-Entwurf; Nachfassen nach 7 Tagen.
+6. **Ergebnis:** Gewonnen → Aufgabenliste; Verloren → Grund. Kennzahlen: Abschlussquote, Ø Zeit bis Angebot, Volumen.
+
+### Automatischer Eingang von Website-Anfragen (geplant, braucht Server)
+
+Im Browser kann das ERP keine E-Mails empfangen. Für „Anfrage kommt rein → Entwurf steht bereit“ ohne Kopieren:
+
+| Weg | Ablauf | Bewertung |
+|---|---|---|
+| A. Webhook aus WordPress (empfohlen) | Wunschliste/Anfrageformular sendet die Daten zusätzlich zur E-Mail als JSON an einen kleinen ERP-Endpunkt (Signatur, Zeitlimit, Duplikatschutz); der Endpunkt legt den Entwurf an | strukturiert, keine KI zum Lesen nötig, zuverlässig; braucht Server-Endpunkt und eine Anpassung im WordPress (Snippet oder Formular-Webhook) |
+| B. Postfach abrufen | eigenes Postfach (z. B. anfrage@…), Server liest neue Mails per IMAP, KI liest wie heute „Anfrage aus E-Mail“ | funktioniert mit jedem Formular und mit normalen Kunden-Mails; braucht Server, Postfachzugang, KI-Kosten je Mail |
+| C. Weiterleitung an Automatisierungsdienst | Mail → Dienst (z. B. Make/Zapier) → ERP | schnell eingerichtet, aber zusätzlicher Dienstleister mit Kundendaten (AVV nötig) |
+
+Voraussetzungen vom Kunden/Christian: Beispiel-E-Mails der Wunschliste (2–3 echte, ggf. geschwärzt), Name des Wunschlisten-Plugins (im Admin: YITH), Frachtsätze je Zone, VK-Preise je m², gewünschtes Antwortpostfach. Datenschutz: Anfragedaten sind personenbezogen → Hinweis in der Datenschutzerklärung, AVV mit Hosting und KI-Anbieter, Löschfristen für nicht gewonnene Anfragen festlegen.
+
 ---
 
 ## 3. Schnittstellen und Synchronisation
@@ -211,6 +234,7 @@ Stand 02.11.2026, lokal geprüft:
 | Datenblatt-PDF ohne KI (pdf.js 3.11.174 lokal statt cdnjs): alle 8 Werte erkannt, übernommen, als geprüft vermerkt | bestanden |
 | KI-Datenblatt mit nachgestellter API-Antwort: Anfrage enthält PDF als Dokument, JSON-Schema und Browser-Header; Werte geprüft, ins Formular übernommen, Nummer aus Herstellerpräfix, Datenblatt am Stein vermerkt | bestanden (echte Claude-API nicht aufgerufen) |
 | Hersteller ausblenden: betroffene Produkte im Shop-Paket ohne Herstellername; Referenz anlegen, freigeben, im Paket mit Kategorien | bestanden |
+| Anfrage aus E-Mail (nachgestellte KI-Antwort) → Kontakt angelegt, Entwurf mit Preisen und Fracht, Prüfliste sperrt Versand, Gewonnen erzeugt Aufgaben, Ziehen nach „Verloren“ fragt Grund ab, Kennzahlen, „Heute zu tun“, Datenqualität | bestanden |
 | Nicht geprüft | echte Claude-API mit echtem Schlüssel und echten Hersteller-Datenblättern; echte Ordnerauswahl und Freigabe nach Browser-Neustart in Chrome/Edge; Betrieb auf GitHub Pages; Laden von pdf.js, Schrift und Produktbildern aus dem Internet; Einspielen des WooCommerce-Pakets |
 | TypeScript-Prüfung | ohne Fehler |
 | Migration auf leerer Datenbank, zweimal | bestanden, zweiter Lauf ohne Wirkung |

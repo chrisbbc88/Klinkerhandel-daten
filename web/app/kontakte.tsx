@@ -8,6 +8,8 @@ import { aendere, lege_an, loesche, neueId } from "../lib/aendern.ts";
 import { kontakteCsv, kontaktImportPlanen, kontaktImportAusfuehren, type KontaktZeile } from "../lib/kontaktcsv.ts";
 import { herunterladen, dateiWaehlen } from "../lib/speicher.ts";
 import { summen, euro } from "../lib/angebot.ts";
+import { datenqualitaet } from "../lib/anfrage.ts";
+import { QualitaetMarke } from "./vorgaenge.tsx";
 
 export const TYP: Record<KontaktTyp, string> = { kunde: "Kunde", hersteller: "Hersteller", lieferant: "Lieferant", partner: "Partner" };
 const TYP_PLURAL: Record<string, string> = { "": "Alle Kontakte", kunde: "Kunden", hersteller: "Hersteller", lieferant: "Lieferanten", partner: "Partner" };
@@ -46,10 +48,11 @@ export function KontaktListe({ typ }: { typ: KontaktTyp | "" }) {
       </div>
       <div class="tabelle-wrap">
         <table class="t">
-          <thead><tr><Kopf feld="name">Name</Kopf><th>Ansprechpartner</th><Kopf feld="typ">Typ</Kopf><Kopf feld="ort">Ort</Kopf><th>Telefon</th><th>E-Mail</th><th class="num">Vorgänge</th><Kopf feld="geaendert">Geändert</Kopf></tr></thead>
+          <thead><tr><Kopf feld="name">Name</Kopf><th>{typ === "kunde" || typ === "partner" ? "Firma" : typ ? "Ansprechpartner" : "Firma / Ansprechpartner"}</th><th>Daten</th><Kopf feld="typ">Typ</Kopf><Kopf feld="ort">Ort</Kopf><th>Telefon</th><th>E-Mail</th><th class="num">Vorgänge</th><Kopf feld="geaendert">Geändert</Kopf></tr></thead>
           <tbody>{sortiert.slice(seite * 50, seite * 50 + 50).map((k) => <tr class="klickbar" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) return; geheZu(`kontakte/k/${k.id}`); }}>
             <td><b style={{ fontWeight: 500 }}>{kontaktName(k)}</b></td>
-            <td>{[k.vorname, k.nachname].filter(Boolean).join(" ") || <span class="faint">–</span>}{k.funktion && <span class="muted klein"> · {k.funktion}</span>}</td>
+            <td>{(k.typ === "kunde" || k.typ === "partner" ? k.firma : [k.vorname, k.nachname].filter(Boolean).join(" ")) || <span class="faint">–</span>}{k.funktion && <span class="muted klein"> · {k.funktion}</span>}</td>
+            <td>{k.typ === "kunde" ? <QualitaetMarke q={datenqualitaet(k)} /> : null}</td>
             <td><span class="marke">{TYP[k.typ]}</span>{k.kundentyp && <span class="muted klein"> {KUNDENTYP[k.kundentyp]}</span>}</td>
             <td>{[k.plz, k.ort].filter(Boolean).join(" ") || <span class="faint">–</span>}</td>
             <td class="nowrap">{k.telefon ? <a href={`tel:${k.telefon.replace(/[^\d+]/g, "")}`}>{k.telefon}</a> : <span class="faint">–</span>}</td>
@@ -57,7 +60,7 @@ export function KontaktListe({ typ }: { typ: KontaktTyp | "" }) {
             <td class="num">{vorgaenge.get(k.id) ?? ""}</td>
             <td class="faint klein nowrap">{relZeit(k.geaendert_am)}</td>
           </tr>)}
-          {!sortiert.length && <tr><td colSpan={8} class="leer">Keine Kontakte. Legen Sie einen an oder importieren Sie eine CSV (z. B. aus Outlook oder Excel).</td></tr>}</tbody>
+          {!sortiert.length && <tr><td colSpan={9} class="leer">Keine Kontakte. Legen Sie einen an oder importieren Sie eine CSV (z. B. aus Outlook oder Excel).</td></tr>}</tbody>
         </table>
       </div>
       <Seiten seite={seite} setSeite={setSeite} gesamt={sortiert.length} proSeite={50} />
@@ -157,6 +160,10 @@ function KDetail({ k }: { k: Kontakt }) {
         {k.typ === "hersteller" && k.hersteller_id && <HerstellerProdukte herstellerId={k.hersteller_id} />}
       </div>
       <div class="raster" style={{ alignContent: "start" }}>
+        {k.typ === "kunde" && (() => { const q = datenqualitaet(k); return <Karte titel="Datenqualität" rechts={<QualitaetMarke q={q} />}>
+          {q.stufe === "ok" ? <p class="muted" style={{ margin: 0 }}>Alle Angaben für Angebot und Lieferung vorhanden.</p>
+            : <ul class="klein" style={{ margin: 0, paddingLeft: 18 }}>{[...q.verdacht, ...q.auffaellig, ...q.fehlt.map((f) => `fehlt: ${f}`)].map((x) => <li>{x}</li>)}</ul>}
+        </Karte>; })()}
         <Karte titel="Aktivitäten">
           <div class="knopfreihe" style={{ marginBottom: 10, flexWrap: "nowrap" }}>
             <input type="text" placeholder="Telefonat, Besuch, Absprache…" value={notiz} onInput={(x) => setNotiz((x.target as HTMLInputElement).value)} onKeyDown={(x) => { if (x.key === "Enter") notieren(notiz); }} />

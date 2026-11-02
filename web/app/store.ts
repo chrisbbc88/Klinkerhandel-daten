@@ -29,6 +29,7 @@ export const z = {
   meldungen: [] as Meldung[],
   importAngebot: null as ImportAngebot | null,
   frage: null as Frage | null,
+  verlustDialog: null as number | null,
   rev: 0,
 };
 
@@ -43,7 +44,7 @@ export function neuZeichnen() { z.rev++; for (const f of hoerer) f(); }
 let mId = 0;
 export function melde(text: string, art: Meldung["art"] = "ok") {
   const m = { id: ++mId, text, art };
-  z.meldungen = [...z.meldungen, m];
+  z.meldungen = [...z.meldungen, m].slice(-3);
   neuZeichnen();
   setTimeout(() => { z.meldungen = z.meldungen.filter((x) => x !== m); neuZeichnen(); }, art === "fehler" ? 9000 : 4000);
 }

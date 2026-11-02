@@ -12,7 +12,7 @@ import { PreisPflege, HinweisListe, SteinCodes } from "./bereiche.tsx";
 import { ReferenzListe, ReferenzNeu, ReferenzDetail } from "./referenzen.tsx";
 import { ImportExport } from "./importexport.tsx";
 import { KontaktListe, KontaktDetail } from "./kontakte.tsx";
-import { VorgangListe, NeuerVorgang, VorgangDetail } from "./vorgaenge.tsx";
+import { VorgangListe, NeuerVorgang, VorgangDetail, VerlustDialog } from "./vorgaenge.tsx";
 import { Einstellungen } from "./einstellungen.tsx";
 import { ImportDialog, SicherungsBanner } from "./sicherung.tsx";
 import type { KontaktTyp } from "../lib/modell.ts";
@@ -170,6 +170,7 @@ function App() {
     {!z.geraet.bearbeiter && <BearbeiterWahl />}
     {palette && <Palette schliessen={() => setPalette(false)} />}
     {z.importAngebot && <ImportDialog />}
+    {z.verlustDialog && <VerlustDialog key={z.verlustDialog} />}
     {z.frage && <Dialog titel={z.frage.titel} onClose={() => z.frage!.antwort(false)} fuss={<>
       <button class="btn" onClick={() => z.frage!.antwort(false)}>Abbrechen</button>
       <button class={`btn ${z.frage.gefahr ? "gefahr" : "primaer"}`} onClick={() => z.frage!.antwort(true)} autoFocus>{z.frage.ok}</button>
