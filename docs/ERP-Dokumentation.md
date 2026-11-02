@@ -160,6 +160,8 @@ Ziel des Kunden: Angebot in 10 Minuten statt 5–6 Tagen, immer mit menschlicher
 4. **Prüfung:** 6-Punkte-Prüfliste mit Name und Zeit; „versendet“ erst danach und nur mit Preisen. Änderungen an Positionen oder Lieferung setzen die Prüfung zurück.
 5. **Versand:** Druck/PDF und E-Mail-Entwurf; Nachfassen nach 7 Tagen.
 6. **Ergebnis:** Gewonnen → Aufgabenliste; Verloren → Grund. Kennzahlen: Abschlussquote, Ø Zeit bis Angebot, Volumen.
+7. **Preisregeln (ab v0.5.0):** Staffelrabatt je Position nach m², Mindermengenzuschlag nach Gesamt-m², beide automatisch, von Hand übersteuerbar. Vier-Augen-Freigabe ab einstellbarer Summe (Standard 5.000 € netto) durch eine andere Person als den Ersteller – in der Browser-Version anhand des gewählten Bearbeiters, mit Anmeldung (Server) verbindlich.
+8. **E-Mail-Vorlagen:** je Situation, mit Platzhaltern; Kopieren oder Mailprogramm. Direktversand erst mit Server (Edge Function + E-Mail-Dienst oder Microsoft 365).
 
 ### Automatischer Eingang von Website-Anfragen (geplant, braucht Server)
 
@@ -172,6 +174,14 @@ Im Browser kann das ERP keine E-Mails empfangen. Für „Anfrage kommt rein → 
 | C. Weiterleitung an Automatisierungsdienst | Mail → Dienst (z. B. Make/Zapier) → ERP | schnell eingerichtet, aber zusätzlicher Dienstleister mit Kundendaten (AVV nötig) |
 
 Voraussetzungen vom Kunden/Christian: Beispiel-E-Mails der Wunschliste (2–3 echte, ggf. geschwärzt), Name des Wunschlisten-Plugins (im Admin: YITH), Frachtsätze je Zone, VK-Preise je m², gewünschtes Antwortpostfach. Datenschutz: Anfragedaten sind personenbezogen → Hinweis in der Datenschutzerklärung, AVV mit Hosting und KI-Anbieter, Löschfristen für nicht gewonnene Anfragen festlegen.
+
+### Option Supabase für den Mehrbenutzerbetrieb (Vorschlag 02.11.2026, nicht entschieden)
+
+- Aufbau: Oberfläche bleibt eine statische Seite (GitHub Pages oder eigene Subdomain). Datenbank, Anmeldung, Dateien und Serverfunktionen laufen bei Supabase (PostgreSQL, Region Frankfurt). Das vorhandene SQL-Schema wird übernommen; der Datenzugriff der Oberfläche wechselt von IndexedDB auf Supabase.
+- Sicherheit: Anmeldung nur per Einladung, MFA für Admin/Leitung; Row Level Security auf allen Tabellen; Einkaufspreise nur für berechtigte Rollen; Änderungsprotokoll per Trigger mit `auth.uid()`; Service-Role-Schlüssel, WooCommerce- und Claude-Schlüssel nur als Secrets in Edge Functions. Der öffentliche „anon“-Schlüssel in der Oberfläche ist vorgesehen und schützt nichts – geschützt wird durch Anmeldung und RLS.
+- Kosten (Listenpreise, Stand 11/2026): Pro-Plan 25 $/Monat inkl. Micro-Instanz, 8 GB DB, 100 GB Dateien, tägliche Sicherungen 7 Tage; Free-Plan nur für Staging (Pausierung nach 7 Tagen Inaktivität, keine Sicherungen). Dazu E-Mail-Dienst 0–9 $, KI nach Verbrauch (ca. 1 Cent je Anfrage, 2–5 Cent je Datenblatt).
+- E-Mail: Versand über Edge Function an einen E-Mail-Dienst per HTTPS (z. B. Brevo, EU) oder Microsoft 365 (Graph, nur freigegebenes Postfach). SMTP-Ports 25/587 sind in Edge Functions gesperrt. Eingang automatisch über Inbound-Parsing oder Webhook aus WordPress.
+- Offen: Kunde als Vertragspartner/Inhaber des Supabase-Kontos, AVV unterzeichnen, Bewertung Drittlandbezug (US-Anbieter), Mailsystem des Kunden (Microsoft 365 oder Alfahosting).
 
 ---
 
@@ -234,6 +244,7 @@ Stand 02.11.2026, lokal geprüft:
 | Datenblatt-PDF ohne KI (pdf.js 3.11.174 lokal statt cdnjs): alle 8 Werte erkannt, übernommen, als geprüft vermerkt | bestanden |
 | KI-Datenblatt mit nachgestellter API-Antwort: Anfrage enthält PDF als Dokument, JSON-Schema und Browser-Header; Werte geprüft, ins Formular übernommen, Nummer aus Herstellerpräfix, Datenblatt am Stein vermerkt | bestanden (echte Claude-API nicht aufgerufen) |
 | Hersteller ausblenden: betroffene Produkte im Shop-Paket ohne Herstellername; Referenz anlegen, freigeben, im Paket mit Kategorien | bestanden |
+| v0.5.0: Seitenleiste mehrere Bereiche offen (bleibt nach Neuladen), Preisstaffel und Mindermenge im Angebot, Vier-Augen-Freigabe (Ersteller gesperrt, zweite Person gibt frei), E-Mail-Vorlagen mit Platzhaltern und Vermerk beim Kontakt, Vorlagen bearbeiten | bestanden |
 | Anfrage aus E-Mail (nachgestellte KI-Antwort) → Kontakt angelegt, Entwurf mit Preisen und Fracht, Prüfliste sperrt Versand, Gewonnen erzeugt Aufgaben, Ziehen nach „Verloren“ fragt Grund ab, Kennzahlen, „Heute zu tun“, Datenqualität | bestanden |
 | Nicht geprüft | echte Claude-API mit echtem Schlüssel und echten Hersteller-Datenblättern; echte Ordnerauswahl und Freigabe nach Browser-Neustart in Chrome/Edge; Betrieb auf GitHub Pages; Laden von pdf.js, Schrift und Produktbildern aus dem Internet; Einspielen des WooCommerce-Pakets |
 | TypeScript-Prüfung | ohne Fehler |

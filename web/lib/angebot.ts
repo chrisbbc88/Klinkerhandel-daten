@@ -14,9 +14,9 @@ export function positionNetto(p: Position): number {
   return r2(p.menge_m2 * p.ep_netto_m2 * (1 - p.rabatt_proz / 100));
 }
 
-export function summen(v: Pick<Vorgang, "positionen" | "fracht_netto">, mwst_proz: number) {
+export function summen(v: Pick<Vorgang, "positionen" | "fracht_netto"> & { mindermenge_netto?: number }, mwst_proz: number) {
   const waren = r2(v.positionen.reduce((a, p) => a + positionNetto(p), 0));
-  const netto = r2(waren + (v.fracht_netto || 0));
+  const netto = r2(waren + (v.fracht_netto || 0) + (v.mindermenge_netto || 0));
   const mwst = r2(netto * mwst_proz / 100);
   return { waren, netto, mwst, brutto: r2(netto + mwst) };
 }

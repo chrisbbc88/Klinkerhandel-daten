@@ -277,6 +277,7 @@ test("Anfrage: Statuswechsel mit Prüfliste, Verlustgrund und Aufgaben", async (
   const { normalisieren, PRUEFSCHRITTE } = await import("../web/lib/modell.ts");
   const { positionAusProdukt } = await import("../web/lib/angebot.ts");
   const d = normalisieren(structuredClone(basis));
+  d.einstellungen.preise.vier_augen_ab = null; // hier ohne Vier-Augen-Regel
   const p = d.produkte[0];
   d.vorgaenge.push({ id: 7, version: 1, erstellt_am: "2026-11-02T08:00:00.000Z", geaendert_am: T0, geaendert_von: "Tobi", nummer: "AN-2026-TO-001", kontakt_id: null, status: "neu", datum: "2026-11-02",
     quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 100), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
@@ -328,4 +329,50 @@ test("Anfrage aus E-Mail: Kontakt erkennen, Positionen zuordnen, Vorgang anlegen
   anfrageAnlegen(d, plan2, roh, "email", "", "Assistenz");
   assert.equal(d.kontakte.length, anzahl);
   assert.match(emlText("From: Anna <a@b.de>\nSubject: Anfrage\nContent-Transfer-Encoding: quoted-printable\n\nGr=C3=BC=C3=9Fe aus Rhede"), /Grüße aus Rhede/);
+});
+
+test("Preisregeln: Staffel, Mindermenge, Handrabatt bleibt, Vier-Augen", async () => {
+  const { staffelRabatt, regelnAnwenden, vierAugenNoetig } = await import("../web/lib/preisregeln.ts");
+  const { statusWechsel, freigeben } = await import("../web/lib/anfrage.ts");
+  const { normalisieren, PRUEFSCHRITTE } = await import("../web/lib/modell.ts");
+  const { positionAusProdukt } = await import("../web/lib/angebot.ts");
+  const d = normalisieren(structuredClone(basis));
+  assert.equal(staffelRabatt(d, 99), 0); assert.equal(staffelRabatt(d, 100), 2); assert.equal(staffelRabatt(d, 300), 4);
+  const p = d.produkte[0];
+  const klein = regelnAnwenden({ positionen: [positionAusProdukt(p, d, 10)], mindermenge_netto: 0, mindermenge_manuell: false }, d);
+  assert.equal(klein.mindermenge_netto, 45);
+  const gross = regelnAnwenden({ positionen: [{ ...positionAusProdukt(p, d, 120) }, { ...positionAusProdukt(p, d, 120), rabatt_proz: 7, rabatt_manuell: true }], mindermenge_netto: 0, mindermenge_manuell: false }, d);
+  assert.equal(gross.positionen[0].rabatt_proz, 2); assert.equal(gross.positionen[1].rabatt_proz, 7); assert.equal(gross.mindermenge_netto, 0);
+  // Vier-Augen ab 5.000 € netto
+  d.vorgaenge.push({ id: 8, version: 1, erstellt_am: T0, geaendert_am: T0, geaendert_von: "Tobi", nummer: "AN-2026-TO-002", kontakt_id: null, status: "neu", datum: "2026-11-02",
+    quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 200), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
+  normalisieren(d);
+  const v = () => d.vorgaenge.find((x) => x.id === 8)!;
+  assert.ok(vierAugenNoetig(v(), d));
+  assert.ok(statusWechsel(d, 8, "angebot_erstellt", "Tobi").ok);
+  v().pruefung = Object.fromEntries(PRUEFSCHRITTE.map(([k]) => [k, { von: "Tobi", zeit: T0 }]));
+  assert.match(statusWechsel(d, 8, "gesendet", "Tobi").fehler!, /Vier-Augen/);
+  assert.equal(freigeben(d, 8, "Tobi").ok, false); // Ersteller darf nicht
+  assert.ok(freigeben(d, 8, "Klaus").ok);
+  assert.ok(statusWechsel(d, 8, "gesendet", "Tobi").ok);
+});
+
+test("E-Mail-Vorlagen: Platzhalter, passende Vorlage, eigene Anpassung", async () => {
+  const { alleVorlagen, vorlageFuellen, passendeVorlage } = await import("../web/lib/vorlagen.ts");
+  const { normalisieren, kontaktLeer } = await import("../web/lib/modell.ts");
+  const { positionAusProdukt } = await import("../web/lib/angebot.ts");
+  const d = normalisieren(structuredClone(basis));
+  const k = { ...kontaktLeer(1, "kunde", "", T0, "x"), anrede: "Frau", vorname: "Anna", nachname: "Meier", email: "a@web.de" };
+  const v = normalisieren({ ...d, vorgaenge: [{ id: 9, version: 1, erstellt_am: T0, geaendert_am: T0, geaendert_von: "Tobi", nummer: "AN-2026-TO-003", kontakt_id: 1, status: "angebot_erstellt", datum: "2026-11-02",
+    quelle: "email", lieferort_plz: "46348", lieferort_ort: "Raesfeld", wunschtermin: "KW 14", betreff: "Neubau EFH", positionen: [{ ...positionAusProdukt(d.produkte[0], d, 80), ep_netto_m2: 50 }], fracht_netto: 95, notiz: "", angebot_am: T0 } as any] }).vorgaenge[0];
+  assert.equal(passendeVorlage(v, k), "angebot");
+  const vl = alleVorlagen(d).find((x) => x.id === "angebot")!;
+  const m = vorlageFuellen(vl, d, v, k, "Tobi");
+  assert.equal(m.betreff, "Ihr Angebot AN-2026-TO-003 – Neubau EFH");
+  assert.ok(m.text.startsWith("Sehr geehrte Frau Meier,"));
+  assert.ok(m.text.includes("Fracht: 95,00"));
+  assert.ok(!/\{[a-z_]+\}/.test(m.text));
+  d.einstellungen.vorlagen = [{ ...vl, betreff: "Angebot {nummer}" }];
+  assert.equal(vorlageFuellen(alleVorlagen(d).find((x) => x.id === "angebot")!, d, v, k, "Tobi").betreff, "Angebot AN-2026-TO-003");
+  assert.equal(passendeVorlage({ ...v, status: "neu" }, { ...k, plz: "", ort: "" }), "fehlende_angaben");
 });

@@ -83,6 +83,8 @@ export interface Position {
   produkt_id: number | null; sku: string; bezeichnung: string;
   flaeche_m2: number; verschnitt_proz: number; bedarf_stk_m2: number | null;
   menge_m2: number; menge_stk: number | null; ep_netto_m2: number; rabatt_proz: number;
+  /** true = Rabatt von Hand gesetzt, Staffel wird nicht mehr automatisch angewendet */
+  rabatt_manuell?: boolean;
 }
 export interface Vorgang extends Basis {
   nummer: string; kontakt_id: number | null; status: VorgangStatus; datum: string;
@@ -94,12 +96,16 @@ export interface Vorgang extends Basis {
   aufgaben: { id: number; text: string; erledigt_von: string | null; erledigt_am: string | null }[];
   verlustgrund: string;
   eingang_text: string;
+  mindermenge_netto: number; mindermenge_manuell: boolean;
+  /** Vier-Augen-Freigabe durch eine zweite Person */
+  freigabe: { von: string; zeit: string } | null;
   lieferort_plz: string; lieferort_ort: string; wunschtermin: string; betreff: string;
   positionen: Position[]; fracht_netto: number; notiz: string; angebot_am: string | null;
 }
 
 export interface Aenderung { zeit: string; von: string; tabelle: string; id: number | string; aktion: "anlegen" | "aendern" | "loeschen"; felder: Record<string, [unknown, unknown]> | null; text?: string }
 
+export interface Vorlage { id: string; titel: string; situation: string; betreff: string; text: string }
 export interface Einstellungen {
   firma: { name: string; strasse: string; plz: string; ort: string; telefon: string; email: string; web: string; ust_id: string };
   angebot: { mwst_proz: number; verschnitt_proz: number; gueltig_tage: number; nummer_praefix: string; fusstext: string };
@@ -107,6 +113,8 @@ export interface Einstellungen {
   ki: { modell: string };
   /** Fracht nach PLZ: erste Ziffern der PLZ (kommagetrennt), Betrag netto, frachtfrei ab m² */
   fracht: { zonen: { name: string; plz: string; betrag: number; frei_ab_m2: number | null }[]; sonst_betrag: number | null };
+  preise: { staffeln: { ab_m2: number; rabatt_proz: number }[]; mindermenge: { unter_m2: number | null; betrag: number }; vier_augen_ab: number | null };
+  vorlagen: Vorlage[];
 }
 
 export interface Daten {
@@ -159,6 +167,8 @@ export const STANDARD_EINSTELLUNGEN: Einstellungen = {
     { name: "Nahbereich (Beispiel)", plz: "463,464,465,466,467", betrag: 0, frei_ab_m2: null },
     { name: "NRW (Beispiel)", plz: "4,5,32,33,57,58,59", betrag: 95, frei_ab_m2: 150 },
   ], sonst_betrag: null },
+  preise: { staffeln: [{ ab_m2: 100, rabatt_proz: 2 }, { ab_m2: 250, rabatt_proz: 4 }], mindermenge: { unter_m2: 20, betrag: 45 }, vier_augen_ab: 5000 },
+  vorlagen: [],
 };
 
 const leer = { bezeichnung_hersteller: "", artikelnr_hersteller: "", oberflaechen: [] as string[], laenge_mm: null, breite_mm: null, hoehe_mm: null,
@@ -274,7 +284,10 @@ export function normalisieren(d: Daten): Daten {
   for (const h of d.hersteller) h.im_shop_anzeigen ??= true;
   for (const p of d.produkte) p.hersteller_im_shop ??= "standard";
   d.einstellungen.fracht ??= structuredClone(STANDARD_EINSTELLUNGEN.fracht);
+  d.einstellungen.preise ??= structuredClone(STANDARD_EINSTELLUNGEN.preise);
+  d.einstellungen.vorlagen ??= [];
   for (const v of d.vorgaenge) {
+    v.mindermenge_netto ??= 0; v.mindermenge_manuell ??= false; v.freigabe ??= null;
     v.lieferort_strasse ??= ""; v.pruefung ??= {}; v.aufgaben ??= []; v.verlustgrund ??= ""; v.eingang_text ??= "";
     v.statusverlauf ??= [{ status: "neu", zeit: v.erstellt_am, von: v.geaendert_von }];
   }

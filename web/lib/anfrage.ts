@@ -6,6 +6,7 @@ import {
 } from "./modell.ts";
 import { positionAusProdukt, positionRechnen, naechsteNummer, summen } from "./angebot.ts";
 import { lege_an, aendere, neueId } from "./aendern.ts";
+import { regelnAnwenden, vierAugenNoetig, erstellerVon } from "./preisregeln.ts";
 
 // ---------- Datenqualität ----------
 export interface Qualitaet { stufe: "ok" | "unvollstaendig" | "pruefen" | "verdacht"; fehlt: string[]; auffaellig: string[]; verdacht: string[] }
@@ -74,6 +75,7 @@ export function statusWechsel(d: Daten, id: number, neu: VorgangStatus, von: str
     const offen = PRUEFSCHRITTE.filter(([k]) => !v.pruefung[k]).map(([, t]) => t);
     if (offen.length) return { ok: false, fehler: `Vor dem Versand bitte prüfen: ${offen.join(", ")}.` };
     if (v.positionen.some((p) => !p.ep_netto_m2 || !p.menge_m2)) return { ok: false, fehler: "Mindestens eine Position hat keinen Preis oder keine Menge." };
+    if (vierAugenNoetig(v, d) && !v.freigabe) return { ok: false, fehler: `Ab ${d.einstellungen.preise.vier_augen_ab} € netto muss eine zweite Person das Angebot freigeben (Vier-Augen-Prinzip).` };
   }
   if (neu === "abgelehnt" && !opt.verlustgrund) return { ok: false, fehler: "Bitte einen Grund angeben." };
   const jetzt = opt.jetzt ?? new Date().toISOString();
@@ -81,8 +83,18 @@ export function statusWechsel(d: Daten, id: number, neu: VorgangStatus, von: str
   if (neu === "angebot_erstellt" && !v.angebot_am) patch.angebot_am = jetzt;
   if (neu === "abgelehnt") patch.verlustgrund = opt.verlustgrund!;
   if (neu === "angenommen" && !v.aufgaben.length) patch.aufgaben = AUFGABEN_GEWONNEN.map((text) => ({ id: neueId(), text, erledigt_von: null, erledigt_am: null }));
-  if (neu === "in_bearbeitung" && (v.status === "gesendet" || v.status === "abgelehnt")) patch.pruefung = {}; // nach Änderung erneut prüfen
+  if (neu === "in_bearbeitung" && (v.status === "gesendet" || v.status === "abgelehnt")) { patch.pruefung = {}; patch.freigabe = null; } // nach Änderung erneut prüfen
   aendere(d, "vorgaenge", id, patch, von, opt.erwarteteVersion, jetzt);
+  return { ok: true };
+}
+
+/** Vier-Augen-Freigabe: nicht durch die Person, die das Angebot erstellt hat. */
+export function freigeben(d: Daten, id: number, von: string, jetzt = new Date().toISOString()): StatusErgebnis {
+  const v = d.vorgaenge.find((x) => x.id === id);
+  if (!v) return { ok: false, fehler: "Vorgang nicht gefunden" };
+  if (v.status !== "angebot_erstellt") return { ok: false, fehler: "Freigeben lässt sich nur ein erstelltes Angebot." };
+  if (erstellerVon(v) === von) return { ok: false, fehler: `${von} hat das Angebot erstellt und darf es nicht selbst freigeben.` };
+  aendere(d, "vorgaenge", id, { freigabe: { von, zeit: jetzt } }, von, undefined, jetzt);
   return { ok: true };
 }
 
@@ -159,6 +171,7 @@ export function emlText(roh: string): string {
 }
 
 export interface AnfragePlan {
+  mindermenge: number;
   kontakt: { vorhanden: Kontakt | null; neu: Partial<Kontakt> };
   qualitaet: Qualitaet;
   positionen: (Position & { gefunden: boolean; original: string })[];
@@ -201,11 +214,14 @@ export function anfragePlanen(d: Daten, r: AnfrageRoh): AnfragePlan {
     return { ...pos, gefunden: !!p, original: x.artikel || x.bezeichnung };
   });
   if (!positionen.length) hinweise.push("Keine Artikel erkannt – Positionen bitte von Hand ergänzen.");
+  const geregelt = regelnAnwenden({ positionen, mindermenge_netto: 0, mindermenge_manuell: false }, d);
+  positionen.splice(0, positionen.length, ...(geregelt.positionen as typeof positionen));
+  if (geregelt.mindermenge_netto) hinweise.push(`Mindermengenzuschlag ${geregelt.mindermenge_netto} € netto angesetzt.`);
   const m2 = positionen.reduce((s, p) => s + p.menge_m2, 0);
   const fracht = lieferung.ort === "Selbstabholung" ? { betrag: 0, zone: "Selbstabholung" } : frachtFuer(d, lieferung.plz, m2);
   if (!fracht) hinweise.push("Für diese PLZ ist keine Frachtzone hinterlegt – Fracht bitte eintragen.");
   if (r.unsicher.trim()) hinweise.push(r.unsicher.trim());
-  return { kontakt: { vorhanden, neu }, qualitaet, positionen, lieferung, fracht, hinweise };
+  return { kontakt: { vorhanden, neu }, qualitaet, positionen, lieferung, fracht, hinweise, mindermenge: geregelt.mindermenge_netto };
 }
 
 /** Legt Kontakt (falls neu) und Vorgang an. Fehlende Kontaktfelder eines vorhandenen Kontakts werden ergänzt, vorhandene nie überschrieben. */
@@ -229,7 +245,7 @@ export function anfrageAnlegen(d: Daten, plan: AnfragePlan, r: AnfrageRoh, quell
     betreff: r.bauvorhaben || "Anfrage", positionen: plan.positionen.map(({ gefunden: _g, original: _o, ...p }) => p), fracht_netto: plan.fracht?.betrag ?? 0,
     notiz: [r.nachricht && `Nachricht des Kunden: ${r.nachricht}`, plan.hinweise.length && `Automatisch erstellt – bitte prüfen:\n- ${plan.hinweise.join("\n- ")}`].filter(Boolean).join("\n\n"),
     angebot_am: null, statusverlauf: [{ status: "neu", zeit: jetzt, von }, { status: "in_bearbeitung", zeit: jetzt, von }],
-    pruefung: {}, aufgaben: [], verlustgrund: "", eingang_text: eingang.slice(0, 20000),
+    pruefung: {}, aufgaben: [], verlustgrund: "", eingang_text: eingang.slice(0, 20000), mindermenge_netto: plan.mindermenge, mindermenge_manuell: false, freigabe: null,
   }, von, jetzt);
   return id;
 }

@@ -23,54 +23,68 @@ import type { Bestand as ShopBestand } from "../../src/import/bestand.ts";
 
 const BESTAND: ShopBestand = JSON.parse(document.getElementById("shop-bestand")!.textContent!);
 
+import type { ComponentChildren } from "preact";
+const GRUPPEN = ["produkte", "kontakte", "angebote", "einstellungen"];
+function ladeMenue(): string[] { try { const x = JSON.parse(localStorage.getItem("erp-menue") ?? "null"); return Array.isArray(x) ? x : GRUPPEN; } catch { return GRUPPEN; } }
+
 function Seitenleiste({ route, offen, schliessen }: { route: string[]; offen: boolean; schliessen: () => void }) {
   const a = ab(), g = z.geraet;
   const [r0, r1] = route;
+  const [auf, setAuf] = useState<string[]>(ladeMenue);
+  const umschalten = (gr: string) => { const n = auf.includes(gr) ? auf.filter((x) => x !== gr) : [...auf, gr]; setAuf(n); try { localStorage.setItem("erp-menue", JSON.stringify(n)); } catch { /* ohne Speicher */ } };
   const link = (href: string, aktiv: boolean, icon: string | null, text: string, zahl?: number, rot?: boolean) =>
     <a class={`sb-a ${aktiv ? "aktiv" : ""}`} href={`#/${href}`} onClick={schliessen} aria-current={aktiv ? "page" : undefined}>
       {icon && <Icon n={icon} />}{text}{zahl ? <span class={`zahl ${rot ? "rot" : ""}`}>{zahl}</span> : null}
     </a>;
-  const produktSub = !r1 || /^\d+$/.test(r1) ? "bestand" : r1;
-  const kontaktTyp = r1 === "k" ? a.kontakte.get(Number(route[2]))?.typ ?? "" : r1 ?? "";
+  const gruppe = (id: string, icon: string, text: string, zahl: number | undefined, kinder: ComponentChildren) => {
+    const istAuf = auf.includes(id);
+    return <div class="sb-grp">
+      <div class="sb-kopf">
+        {link(id, r0 === id && !r1, icon, text, istAuf ? undefined : zahl)}
+        <button class={`sb-pfeil ${istAuf ? "auf" : ""}`} onClick={() => umschalten(id)} aria-expanded={istAuf} aria-label={`${text} ${istAuf ? "zuklappen" : "aufklappen"}`}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
+      </div>
+      {istAuf && <div class="sb-sub">{kinder}</div>}
+    </div>;
+  };
+  const produktSub = r0 !== "produkte" ? "" : !r1 || /^\d+$/.test(r1) ? "bestand" : r1;
+  const kontaktTyp = r0 !== "kontakte" ? null : r1 === "k" ? a.kontakte.get(Number(route[2]))?.typ ?? "" : r1 ?? "";
   const gesichertOk = !sicherungFaellig() || (z.ordner === "erlaubt" && g.auto_an);
   return <aside class={`sb ${offen ? "offen" : ""}`} aria-label="Hauptnavigation">
     <a class="sb-brand" href="#/" onClick={schliessen}><span class="mark"><i /><i /><i /><i /><i /><i /><i /></span><span><b>Klinkerhandel</b><span>ERP · Testversion</span></span></a>
     <nav>
       {link("", !r0, "dashboard", "Dashboard")}
-      <div class="sb-grp">
-        {link("produkte", r0 === "produkte", "produkte", "Produkte")}
-        {r0 === "produkte" && <div class="sb-sub">
-          {link("produkte", produktSub === "bestand", null, "Bestand")}
-          {link("produkte/neu", produktSub === "neu", null, "Produkt erfassen")}
-          {link("produkte/preise", produktSub === "preise", null, "Preise")}
-          {link("produkte/hinweise", produktSub === "hinweise", null, "Hinweise", a.hinweiseOffen)}
-          {link("produkte/referenzen", produktSub === "referenzen", null, "Referenzen")}
-          {link("produkte/export", produktSub === "export", null, "Import & Export", a.exportOffen)}
-        </div>}
-      </div>
-      <div class="sb-grp">
-        {link("kontakte", r0 === "kontakte", "kontakte", "Kontakte")}
-        {r0 === "kontakte" && <div class="sb-sub">
-          {link("kontakte/kunde", kontaktTyp === "kunde", null, "Kunden")}
-          {link("kontakte/hersteller", kontaktTyp === "hersteller", null, "Hersteller")}
-          {link("kontakte/lieferant", kontaktTyp === "lieferant", null, "Lieferanten")}
-          {link("kontakte/partner", kontaktTyp === "partner", null, "Partner")}
-        </div>}
-      </div>
-      <div class="sb-grp">{link("angebote", r0 === "angebote", "angebote", "Anfragen & Angebote", a.vorgaengeOffen)}</div>
-      <div class="sb-grp">
-        {link("einstellungen", r0 === "einstellungen", "einstellungen", "Einstellungen")}
-        {r0 === "einstellungen" && <div class="sb-sub">
-          {link("einstellungen/allgemein", !r1 || r1 === "allgemein", null, "Allgemein")}
-          {link("einstellungen/sicherung", r1 === "sicherung", null, "Sicherung & Daten")}
-          {link("einstellungen/stammdaten", r1 === "stammdaten", null, "Stammdaten")}
-        </div>}
-      </div>
+      {gruppe("produkte", "produkte", "Produkte", a.exportOffen || undefined, <>
+        {link("produkte", produktSub === "bestand", null, "Bestand")}
+        {link("produkte/neu", produktSub === "neu", null, "Produkt erfassen")}
+        {link("produkte/preise", produktSub === "preise", null, "Preise")}
+        {link("produkte/hinweise", produktSub === "hinweise", null, "Hinweise", a.hinweiseOffen)}
+        {link("produkte/referenzen", produktSub === "referenzen", null, "Referenzen")}
+        {link("produkte/export", produktSub === "export", null, "Import & Export", a.exportOffen)}
+      </>)}
+      {gruppe("kontakte", "kontakte", "Kontakte", undefined, <>
+        {link("kontakte/kunde", kontaktTyp === "kunde", null, "Kunden")}
+        {link("kontakte/hersteller", kontaktTyp === "hersteller", null, "Hersteller")}
+        {link("kontakte/lieferant", kontaktTyp === "lieferant", null, "Lieferanten")}
+        {link("kontakte/partner", kontaktTyp === "partner", null, "Partner")}
+      </>)}
+      {gruppe("angebote", "angebote", "Anfragen & Angebote", a.vorgaengeOffen, <>
+        {link("angebote", r0 === "angebote" && (!r1 || /^\d+$/.test(r1)), null, "Pipeline", a.vorgaengeOffen)}
+        {link("angebote/neu", r0 === "angebote" && r1 === "neu", null, "Neue Anfrage")}
+        {link("einstellungen/vorlagen", r0 === "einstellungen" && r1 === "vorlagen", null, "E-Mail-Vorlagen")}
+      </>)}
+      {gruppe("einstellungen", "einstellungen", "Einstellungen", undefined, <>
+        {link("einstellungen/allgemein", r0 === "einstellungen" && (!r1 || r1 === "allgemein"), null, "Allgemein")}
+        {link("einstellungen/preise", r0 === "einstellungen" && r1 === "preise", null, "Preisregeln & Freigabe")}
+        {link("einstellungen/sicherung", r0 === "einstellungen" && r1 === "sicherung", null, "Sicherung & Daten")}
+        {link("einstellungen/stammdaten", r0 === "einstellungen" && r1 === "stammdaten", null, "Stammdaten")}
+      </>)}
     </nav>
     <div class="sb-fuss">
       <button onClick={() => geraetAendern({ bearbeiter: null })} title="Bearbeiter wechseln"><span class="wer" style={{ width: 20, height: 20, fontSize: 9, background: "var(--signal)" }}>{(g.bearbeiter ?? "?").slice(0, 2).toUpperCase()}</span>{g.bearbeiter ?? "Wer arbeitet?"}</button>
       <button onClick={() => sichern(false)} title="Jetzt sichern" disabled={z.sicherungLaeuft}>
-        <span class={`punkt ${gesichertOk ? "ok" : z.ordner === "freigeben" ? "warn" : "warn"}`} />
+        <span class={`punkt ${gesichertOk ? "ok" : "warn"}`} />
         {z.sicherungLaeuft ? "Sichere…" : g.letzte_sicherung ? `Gesichert ${relZeit(g.letzte_sicherung)}` : "Noch nicht gesichert"}
       </button>
       {z.nurLesen && <span style={{ color: "#e0a531" }}>Nur lesen</span>}

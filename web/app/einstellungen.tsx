@@ -7,6 +7,8 @@ import { useEffect } from "preact/hooks";
 import { kiSchluesselLesen, kiSchluesselSpeichern } from "../lib/speicher.ts";
 import { kiSchluesselVergessen } from "./ki.tsx";
 import { KI_MODELLE, API_URL } from "../lib/ki.ts";
+import { STANDARD_VORLAGEN, PLATZHALTER, alleVorlagen } from "../lib/vorlagen.ts";
+import type { Vorlage } from "../lib/modell.ts";
 import { SicherungSeite } from "./sicherung.tsx";
 import { kontaktLeer, type Einstellungen as E } from "../lib/modell.ts";
 import { aendere, lege_an, neueId } from "../lib/aendern.ts";
@@ -19,12 +21,14 @@ export function Einstellungen({ sub, bestand }: { sub?: string; bestand: Bestand
   return <>
     <Seitenkopf titel="Einstellungen" />
     <div class="reiter">
-      {[["allgemein", "Allgemein"], ["sicherung", "Sicherung & Daten"], ["stammdaten", "Stammdaten"], ["info", "Über das ERP"]].map(([k, l]) => <button class={reiter === k ? "an" : ""} onClick={() => { location.hash = `#/einstellungen/${k}`; }}>{l}</button>)}
+      {[["allgemein", "Allgemein"], ["preise", "Preisregeln & Freigabe"], ["vorlagen", "E-Mail-Vorlagen"], ["sicherung", "Sicherung & Daten"], ["stammdaten", "Stammdaten"], ["info", "Über das ERP"]].map(([k, l]) => <button class={reiter === k ? "an" : ""} onClick={() => { location.hash = `#/einstellungen/${k}`; }}>{l}</button>)}
     </div>
     {reiter === "allgemein" && <Allgemein />}
     {reiter === "sicherung" && <SicherungSeite bestand={bestand} />}
     {reiter === "stammdaten" && <Stammdaten />}
     {reiter === "info" && <Info />}
+    {reiter === "preise" && <PreisRegeln />}
+    {reiter === "vorlagen" && <Vorlagen />}
   </>;
 }
 
@@ -233,4 +237,96 @@ function KiEinstellung({ modell, setModell }: { modell: string; setModell: (m: s
       <li>Die Modellauswahl gilt für alle (wird mit den Einstellungen gespeichert), der Schlüssel nur hier.</li>
     </ul>
   </Karte>;
+}
+
+function PreisRegeln() {
+  const d = z.daten;
+  const [p, setP] = useState(() => structuredClone(d.einstellungen.preise));
+  const geaendert = JSON.stringify(p) !== JSON.stringify(d.einstellungen.preise);
+  const speichern = () => aendern((dd, von) => {
+    dd.einstellungen.preise = { ...structuredClone(p), staffeln: [...p.staffeln].filter((x) => x.ab_m2 > 0).sort((a, b) => a.ab_m2 - b.ab_m2) };
+    dd.aenderungen.push({ zeit: new Date().toISOString(), von, tabelle: "einstellungen", id: 0, aktion: "aendern", felder: null, text: "Preisregeln geändert" });
+  }, "Preisregeln gespeichert. Sie gelten für neue und geänderte Positionen.");
+  return <div class="raster r2">
+    <Karte titel="Preisstaffel (Rabatt nach Menge je Position)">
+      <table class="t"><thead><tr><th>ab m²</th><th>Rabatt %</th><th></th></tr></thead>
+        <tbody>{p.staffeln.map((s, i) => <tr>
+          <td><Zahl wert={s.ab_m2} setze={(v) => setP({ ...p, staffeln: p.staffeln.map((x, j) => (j === i ? { ...x, ab_m2: v ?? 0 } : x)) })} aria-label="ab m²" /></td>
+          <td><Zahl wert={s.rabatt_proz} setze={(v) => setP({ ...p, staffeln: p.staffeln.map((x, j) => (j === i ? { ...x, rabatt_proz: v ?? 0 } : x)) })} aria-label="Rabatt" /></td>
+          <td><button class="btn link klein" onClick={() => setP({ ...p, staffeln: p.staffeln.filter((_, j) => j !== i) })}>×</button></td>
+        </tr>)}</tbody></table>
+      <button class="btn klein" style={{ marginTop: 10 }} onClick={() => setP({ ...p, staffeln: [...p.staffeln, { ab_m2: 0, rabatt_proz: 0 }] })}>Stufe hinzufügen</button>
+      <p class="muted klein" style={{ marginBottom: 0 }}>Gilt automatisch für jede Artikelposition nach ihrer Menge (inkl. Verschnitt). Ein von Hand eingetragener Rabatt hat Vorrang; mit „Staffel“ lässt er sich zurücksetzen. Die Werte sind Beispiele.</p>
+    </Karte>
+    <div class="raster" style={{ alignContent: "start" }}>
+      <Karte titel="Mindermengenzuschlag">
+        <div class="formular">
+          <Feld label="Wenn Gesamtmenge unter m²" hinweis="leer = nie"><Zahl wert={p.mindermenge.unter_m2} setze={(v) => setP({ ...p, mindermenge: { ...p.mindermenge, unter_m2: v } })} /></Feld>
+          <Feld label="Zuschlag € netto"><Zahl wert={p.mindermenge.betrag} setze={(v) => setP({ ...p, mindermenge: { ...p.mindermenge, betrag: v ?? 0 } })} /></Feld>
+        </div>
+        <p class="muted klein" style={{ marginBottom: 0 }}>Wird im Angebot als eigene Zeile ausgewiesen und lässt sich je Angebot überschreiben.</p>
+      </Karte>
+      <Karte titel="Vier-Augen-Freigabe">
+        <Feld label="Freigabe durch zweite Person ab € netto" hinweis="leer = keine Freigabe nötig"><Zahl wert={p.vier_augen_ab} setze={(v) => setP({ ...p, vier_augen_ab: v })} /></Feld>
+        <p class="muted klein" style={{ marginBottom: 0 }}>Ab dieser Summe kann ein Angebot erst als versendet markiert werden, wenn jemand anderes als der Ersteller es freigegeben hat.</p>
+      </Karte>
+      <div class="knopfreihe">
+        <button class="btn primaer" disabled={!geaendert || z.nurLesen} onClick={speichern}><Icon n="sichern" />Speichern</button>
+        <button class="btn" disabled={!geaendert} onClick={() => setP(structuredClone(d.einstellungen.preise))}>Verwerfen</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function Vorlagen() {
+  const d = z.daten;
+  const liste = alleVorlagen(d);
+  const [id, setId] = useState(liste[0].id);
+  const original = liste.find((x) => x.id === id) ?? liste[0];
+  const [e, setE] = useState<Vorlage>(() => structuredClone(original));
+  const istStandard = STANDARD_VORLAGEN.some((x) => x.id === e.id);
+  const angepasst = (d.einstellungen.vorlagen ?? []).some((x) => x.id === e.id);
+  const geaendert = JSON.stringify(e) !== JSON.stringify(original);
+  const waehlen = (nid: string) => { setId(nid); setE(structuredClone(liste.find((x) => x.id === nid)!)); };
+  const speichern = () => aendern((dd, von) => {
+    dd.einstellungen.vorlagen = [...(dd.einstellungen.vorlagen ?? []).filter((x) => x.id !== e.id), structuredClone(e)];
+    dd.aenderungen.push({ zeit: new Date().toISOString(), von, tabelle: "einstellungen", id: 0, aktion: "aendern", felder: null, text: `E-Mail-Vorlage „${e.titel}“ geändert` });
+  }, "Vorlage gespeichert.");
+  async function zuruecksetzen() {
+    if (istStandard && !(await frage(`„${e.titel}“ auf den Standardtext zurücksetzen?`, "Zurücksetzen", "Zurücksetzen"))) return;
+    if (!istStandard && !(await frage(`Vorlage „${e.titel}“ löschen?`, "Löschen", "Löschen", true))) return;
+    aendern((dd) => { dd.einstellungen.vorlagen = (dd.einstellungen.vorlagen ?? []).filter((x) => x.id !== e.id); });
+    const s = STANDARD_VORLAGEN.find((x) => x.id === e.id);
+    if (s) setE(structuredClone(s)); else waehlen(STANDARD_VORLAGEN[0].id);
+  }
+  function neu() {
+    const v: Vorlage = { id: `eigen-${Date.now()}`, titel: "Neue Vorlage", situation: "Eigene", betreff: "", text: "{anrede},\n\n\n\nMit freundlichen Grüßen\n{bearbeiter}\n{firma}" };
+    aendern((dd) => { dd.einstellungen.vorlagen = [...(dd.einstellungen.vorlagen ?? []), v]; });
+    setId(v.id); setE(v);
+  }
+  return <div class="raster" style={{ gridTemplateColumns: "240px minmax(0,1fr) 260px" }}>
+    <Karte ohnePadding titel="Vorlagen" rechts={<button class="btn klein" onClick={neu} disabled={z.nurLesen}>Neu</button>}>
+      <div style={{ padding: 8, display: "grid", gap: 4 }}>{[...new Set(liste.map((x) => x.situation))].map((sit) => <div>
+        <div class="faint klein" style={{ margin: "6px 4px 2px" }}>{sit}</div>
+        {liste.filter((x) => x.situation === sit).map((x) => <button class={`chip ${x.id === id ? "an" : ""}`} style={{ width: "100%", borderRadius: 6, marginBottom: 4, justifyContent: "flex-start" }} onClick={() => waehlen(x.id)}>{x.titel}{(d.einstellungen.vorlagen ?? []).some((y) => y.id === x.id) && STANDARD_VORLAGEN.some((y) => y.id === x.id) ? " ·" : ""}</button>)}
+      </div>)}</div>
+    </Karte>
+    <Karte titel={e.titel} rechts={angepasst && istStandard ? <span class="marke info">angepasst</span> : undefined}>
+      <div class="formular" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <Feld label="Name"><Text wert={e.titel} setze={(v) => setE({ ...e, titel: v })} /></Feld>
+        <Feld label="Situation"><Text wert={e.situation} setze={(v) => setE({ ...e, situation: v })} /></Feld>
+        <Feld label="Betreff" klasse="breit"><Text wert={e.betreff} setze={(v) => setE({ ...e, betreff: v })} /></Feld>
+        <Feld label="Text" klasse="breit"><textarea rows={18} value={e.text} onInput={(x) => setE({ ...e, text: (x.target as HTMLTextAreaElement).value })} style={{ fontFamily: "var(--mono)", fontSize: 12.5 }} /></Feld>
+      </div>
+      <div class="knopfreihe" style={{ marginTop: 10 }}>
+        <button class="btn primaer" disabled={!geaendert || z.nurLesen} onClick={speichern}><Icon n="sichern" />Speichern</button>
+        <button class="btn" disabled={!geaendert} onClick={() => setE(structuredClone(original))}>Verwerfen</button>
+        {(angepasst || !istStandard) && <button class="btn gefahr" onClick={zuruecksetzen}>{istStandard ? "Auf Standard zurücksetzen" : "Löschen"}</button>}
+      </div>
+    </Karte>
+    <Karte titel="Platzhalter">
+      <p class="muted klein" style={{ marginTop: 0 }}>Werden beim Schreiben aus dem Vorgang gefüllt. Text in [eckigen Klammern] füllen Sie selbst.</p>
+      <dl class="dl klein" style={{ gridTemplateColumns: "auto 1fr" }}>{PLATZHALTER.map(([k, t]) => <><dt class="mono">{k}</dt><dd>{t}</dd></>)}</dl>
+    </Karte>
+  </div>;
 }

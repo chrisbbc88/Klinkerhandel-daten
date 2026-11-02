@@ -3,6 +3,12 @@
 Die Versionsnummer steht unten rechts auf jeder Seite der Testversion (Klick öffnet Einstellungen › Über das ERP).
 Jede ausgelieferte `index.html` erhält eine neue Nummer (`package.json` → `version`, dann `npm run build:web`).
 
+## v0.5.0 – 02.11.2026
+- E-Mail-Vorlagen je Situation (Eingangsbestätigung, Rückfrage fehlende Angaben, Angebot, Nachfassen, Auftragsbestätigung, Liefertermin, Bestellung beim Lieferanten, Rückfrage nach Absage) mit Platzhaltern; im Vorgang „E-Mail schreiben“: passende Vorlage vorausgewählt, Text änderbar, kopieren oder im Mailprogramm öffnen, Vermerk beim Kontakt. Vorlagen unter Einstellungen bearbeiten.
+- Preisstaffel (Rabatt je Position nach m²) und Mindermengenzuschlag, automatisch angewendet; Handrabatt und Handzuschlag haben Vorrang.
+- Vier-Augen-Freigabe ab einstellbarer Summe (Standard 5.000 € netto): Versand erst nach Freigabe durch eine andere Person als den Ersteller.
+- Seitenleiste: Bereiche einzeln auf- und zuklappen, mehrere gleichzeitig offen; Zustand wird gemerkt.
+
 ## v0.4.0 – 02.11.2026
 - Kunden überall als „Vorname Nachname · Firma · Lieferort“ (fehlende Teile als –); neue Anfrage mit Anrede, Vor-/Nachname, Adresse, Firma optional.
 - Pipeline-Ansicht mit Spalten Neu, In Bearbeitung, Zur Prüfung, Versendet, Gewonnen, Verloren; Karten per Ziehen verschieben; Kennzahlen: offenes Volumen, Gewonnen, Abschlussquote, Ø Zeit bis Angebot, Nachfassen nach 7 Tagen.

@@ -9,10 +9,12 @@ import {
 } from "../lib/modell.ts";
 import { aendere, lege_an, loesche, neueId } from "../lib/aendern.ts";
 import { positionRechnen, positionNetto, positionAusProdukt, summen, naechsteNummer, euro, zahl } from "../lib/angebot.ts";
-import { datenqualitaet, QUALITAET_TEXT, frachtFuer, statusWechsel, pipelineKennzahlen, anfragePlanen, anfrageAnlegen, emlText, ANFRAGE_SCHEMA, ANFRAGE_ANWEISUNG, type AnfrageRoh, type AnfragePlan, type Qualitaet } from "../lib/anfrage.ts";
+import { datenqualitaet, QUALITAET_TEXT, frachtFuer, statusWechsel, freigeben, pipelineKennzahlen, anfragePlanen, anfrageAnlegen, emlText, ANFRAGE_SCHEMA, ANFRAGE_ANWEISUNG, type AnfrageRoh, type AnfragePlan, type Qualitaet } from "../lib/anfrage.ts";
 import { kiStrukturiert, KiFehler } from "../lib/ki.ts";
 import { dateiWaehlen } from "../lib/speicher.ts";
 import { kiSchluessel } from "./ki.tsx";
+import { regelnAnwenden, vierAugenNoetig, erstellerVon } from "../lib/preisregeln.ts";
+import { alleVorlagen, passendeVorlage, vorlageFuellen } from "../lib/vorlagen.ts";
 
 export const QUELLE: Record<Vorgang["quelle"], string> = { telefon: "Telefon", email: "E-Mail", website: "Website-Formular", wunschliste: "Wunschliste (Website)", vor_ort: "Vor Ort", sonstige: "Sonstige" };
 const STATUS_MARKE: Record<VorgangStatus, string> = { neu: "info", in_bearbeitung: "warn", angebot_erstellt: "dunkel", gesendet: "", angenommen: "ok", abgelehnt: "bad", archiviert: "" };
@@ -104,6 +106,7 @@ export function VorgangListe() {
                   {q2 && q2.stufe !== "ok" && <QualitaetMarke q={q2} />}
                   {bearbeitbar(v.status) && v.positionen.length > 0 && <span class={`marke ${pruef === PRUEFSCHRITTE.length ? "ok" : ""}`}>Prüfung {pruef}/{PRUEFSCHRITTE.length}</span>}
                   {v.quelle === "wunschliste" && <span class="marke info">Wunschliste</span>}
+                  {v.status === "angebot_erstellt" && vierAugenNoetig(v, d) && !v.freigabe && <span class="marke warn">Freigabe fehlt</span>}
                   {offeneAufgaben > 0 && <span class="marke warn">{offeneAufgaben} Aufgaben</span>}
                   {v.status === "abgelehnt" && v.verlustgrund && <span class="marke">{v.verlustgrund}</span>}
                 </div>
@@ -224,7 +227,7 @@ function MailAnfrage({ onClose }: { onClose: () => void }) {
             <tbody>{p.positionen.map((x) => <tr><td>{x.gefunden ? <span class="mono">{x.sku}</span> : <span class="marke warn">nicht gefunden</span>} <span class="klein muted">{x.gefunden ? "" : x.original}</span></td>
               <td class="num">{zahl(x.menge_m2)}</td><td class="num">{x.ep_netto_m2 ? euro(x.ep_netto_m2) : <span class="marke warn">fehlt</span>}</td><td class="num">{euro(positionNetto(x))}</td></tr>)}
               {!p.positionen.length && <tr><td colSpan={4} class="muted">keine Artikel erkannt</td></tr>}</tbody></table>
-          <div class="karte-inhalt" style={{ borderTop: "1px solid var(--line)" }}><b>Entwurf: {euro(summen({ positionen: p.positionen, fracht_netto: p.fracht?.betrag ?? 0 }, mw).netto)} netto</b></div>
+          <div class="karte-inhalt" style={{ borderTop: "1px solid var(--line)" }}><b>Entwurf: {euro(summen({ positionen: p.positionen, fracht_netto: p.fracht?.betrag ?? 0, mindermenge_netto: p.mindermenge }, mw).netto)} netto</b></div>
         </div>
         {p.hinweise.length > 0 && <div class="hinweisbox warn" style={{ display: "block" }}><b>Bitte prüfen</b><ul style={{ margin: "4px 0 0", paddingLeft: 18 }} class="klein">{p.hinweise.map((h) => <li>{h}</li>)}</ul></div>}
         <p class="muted klein" style={{ margin: 0 }}>Der Entwurf wird mit Status „In Bearbeitung“ angelegt. Versendet werden kann er erst nach der Prüfliste. {p.kontakt.vorhanden ? "Beim vorhandenen Kontakt werden nur leere Felder ergänzt." : ""}</p>
@@ -260,8 +263,8 @@ export function NeuerVorgang() {
       lege_an(dd, "vorgaenge", {
         id, version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von, nummer: naechsteNummer(dd, von), kontakt_id: kid, status: "neu", datum: heute(),
         quelle: v.quelle, lieferort_strasse: v.lieferort_strasse || (v.lieferort_plz ? "" : k.strasse), lieferort_plz: plz, lieferort_ort: v.lieferort_ort || k.ort, wunschtermin: v.wunschtermin,
-        betreff: v.betreff || (produkt ? `Anfrage ${produkt.sku}` : ""), positionen: pos, fracht_netto: fr?.betrag ?? 0, notiz: "", angebot_am: null,
-        statusverlauf: [{ status: "neu", zeit: jetzt, von }], pruefung: {}, aufgaben: [], verlustgrund: "", eingang_text: "",
+        betreff: v.betreff || (produkt ? `Anfrage ${produkt.sku}` : ""), fracht_netto: fr?.betrag ?? 0, notiz: "", angebot_am: null,
+        statusverlauf: [{ status: "neu", zeit: jetzt, von }], pruefung: {}, aufgaben: [], verlustgrund: "", eingang_text: "", ...regelnAnwenden({ positionen: pos, mindermenge_netto: 0, mindermenge_manuell: false }, dd), freigabe: null,
       }, von);
     }, "Anfrage angelegt.");
     if (ok) geheZu(`angebote/${id}`);
@@ -325,20 +328,22 @@ function VDetail({ v }: { v: Vorgang }) {
   const s = summen(e, mw);
   const offenBearb = bearbeitbar(v.status);
   const set = (x: Partial<Vorgang>) => setPatch({ ...patch, x: { ...patch.x, ...x } });
-  const setPos = (i: number, x: Partial<Position>) => set({ positionen: e.positionen.map((p, j) => (j === i ? positionRechnen({ ...p, ...x }) : p)) });
+  /** Positionen setzen und Preisregeln (Staffel, Mindermenge) anwenden. */
+  const setPositionen = (positionen: Position[], extra: Partial<Vorgang> = {}) => { const r = regelnAnwenden({ positionen, mindermenge_netto: e.mindermenge_netto, mindermenge_manuell: e.mindermenge_manuell, ...extra }, d); set({ ...extra, positionen: r.positionen, mindermenge_netto: r.mindermenge_netto }); };
+  const setPos = (i: number, x: Partial<Position>) => setPositionen(e.positionen.map((p, j) => (j === i ? positionRechnen({ ...p, ...x }) : p)));
   const neuLaden = () => setPatch({ x: {}, ver: v.version });
 
   function hinzufuegen() {
     const t = suche.trim().toUpperCase();
     if (!t) return;
     const p = d.produkte.find((x) => x.sku?.toUpperCase() === t) ?? d.produkte.find((x) => x.sku?.toUpperCase().includes(t));
-    if (!p) set({ positionen: [...e.positionen, positionRechnen({ produkt_id: null, sku: "", bezeichnung: suche.trim(), flaeche_m2: 0, verschnitt_proz: 0, bedarf_stk_m2: null, menge_m2: 0, menge_stk: null, ep_netto_m2: 0, rabatt_proz: 0 })] });
-    else { if (!aktuellerPreis(p, "vk")) melde(`${p.sku} hat keinen VK je m² – bitte Preis eintragen.`, "info"); set({ positionen: [...e.positionen, positionAusProdukt(p, d, 0)] }); }
+    if (!p) setPositionen([...e.positionen, positionRechnen({ produkt_id: null, sku: "", bezeichnung: suche.trim(), flaeche_m2: 0, verschnitt_proz: 0, bedarf_stk_m2: null, menge_m2: 0, menge_stk: null, ep_netto_m2: 0, rabatt_proz: 0 })]);
+    else { if (!aktuellerPreis(p, "vk")) melde(`${p.sku} hat keinen VK je m² – bitte Preis eintragen.`, "info"); setPositionen([...e.positionen, positionAusProdukt(p, d, 0)]); }
     setSuche("");
   }
   function speichern(): boolean {
     if (!geaendert) return true;
-    const pr = Object.keys(offen).some((x) => ["positionen", "fracht_netto", "lieferort_plz", "lieferort_ort", "lieferort_strasse"].includes(x)) && Object.keys(v.pruefung).length ? { pruefung: {} } : {};
+    const pr = Object.keys(offen).some((x) => ["positionen", "fracht_netto", "mindermenge_netto", "lieferort_plz", "lieferort_ort", "lieferort_strasse"].includes(x)) && (Object.keys(v.pruefung).length || v.freigabe) ? { pruefung: {}, freigabe: null } : {};
     const ok = aendern((dd, von) => aendere(dd, "vorgaenge", v.id, { ...offen, ...pr } as Partial<Vorgang>, von, patch.ver), Object.keys(pr).length ? "Gespeichert. Die Prüfliste wurde zurückgesetzt, weil sich Positionen oder Lieferung geändert haben." : "Gespeichert.");
     if (ok) setPatch({ x: {}, ver: z.daten.vorgaenge.find((x) => x.id === v.id)!.version });
     return ok;
@@ -374,18 +379,25 @@ function VDetail({ v }: { v: Vorgang }) {
   const mail = k?.email ? `mailto:${encodeURIComponent(k.email)}?subject=${encodeURIComponent(`Ihr Angebot ${v.nummer} – ${d.einstellungen.firma.name}`)}&body=${encodeURIComponent(
     `${anrede},\n\nvielen Dank für Ihre Anfrage. Anbei erhalten Sie unser Angebot ${v.nummer} über ${euro(s.brutto)} brutto.\n\nMit freundlichen Grüßen\n${ich()}\n${d.einstellungen.firma.name}`)}` : null;
   const pruefOk = PRUEFSCHRITTE.every(([key]) => v.pruefung[key]);
+  const vierAugen = vierAugenNoetig(v, d);
+  const ersteller = erstellerVon(v);
+  const versandOk = pruefOk && (!vierAugen || !!v.freigabe);
+  const [mailOffen, setMailOffen] = useState(false);
+  function freigeben_() {
+    aendern((dd, von) => { const r = freigeben(dd, v.id, von); if (!r.ok) throw new Error(r.fehler); }, "Angebot freigegeben (Vier-Augen).");
+  }
 
   return <>
     <Seitenkopf titel={<span><span class="mono">{v.nummer}</span> <span class={`marke ${STATUS_MARKE[v.status]}`}>{VORGANG_STATUS[v.status]}</span></span>}
       text={<>{k ? <a href={`#/kontakte/k/${k.id}`}>{kundenZeile(k, v)}</a> : "ohne Kunde"} · {datum(v.datum)} · {QUELLE[v.quelle]} · zuletzt {v.geaendert_von}, {relZeit(v.geaendert_am)}</>}>
       <a class="btn" href="#/angebote">← Übersicht</a>
       <a class="btn" href={`#/angebote/${v.id}/druck`}><Icon n="drucken" />Angebot ansehen / drucken</a>
-      {mail && v.positionen.length > 0 && <a class="btn" href={mail}><Icon n="mail" />E-Mail an Kunden</a>}
+      <button class="btn dunkel" onClick={() => setMailOffen(true)}><Icon n="mail" />E-Mail schreiben</button>
     </Seitenkopf>
     <div class="knopfreihe" style={{ marginBottom: 14 }}>
       <span class="muted klein">Nächster Schritt:</span>
       {VORGANG_UEBERGANG[v.status].map((x) => <button class={`btn klein ${x === "angenommen" ? "primaer" : x === "abgelehnt" ? "gefahr" : x === "angebot_erstellt" || x === "gesendet" ? "dunkel" : ""}`}
-        disabled={z.nurLesen || (x === "gesendet" && !pruefOk)} title={x === "gesendet" && !pruefOk ? "Erst die Prüfliste abhaken" : ""} onClick={() => status(x)}>{x === "angebot_erstellt" ? "Angebot erstellt → zur Prüfung" : x === "gesendet" ? "Als versendet markieren" : VORGANG_STATUS[x]}</button>)}
+        disabled={z.nurLesen || (x === "gesendet" && !versandOk)} title={x === "gesendet" && !pruefOk ? "Erst die Prüfliste abhaken" : x === "gesendet" && !versandOk ? "Vier-Augen-Freigabe fehlt" : ""} onClick={() => status(x)}>{x === "angebot_erstellt" ? "Angebot erstellt → zur Prüfung" : x === "gesendet" ? "Als versendet markieren" : VORGANG_STATUS[x]}</button>)}
       {!VORGANG_UEBERGANG[v.status].length && <span class="muted klein">abgeschlossen</span>}
     </div>
     {fremd && <div class="hinweisbox warn" style={{ marginBottom: 12 }}><span>Der Vorgang wurde inzwischen anderweitig geändert. Speichern ist gesperrt.</span><div class="knopfreihe"><button class="btn klein" onClick={neuLaden}>Neu laden</button></div></div>}
@@ -413,9 +425,10 @@ function VDetail({ v }: { v: Vorgang }) {
                   <td class="num">{zahl(p.menge_m2)}</td>
                   <td class="num" title={p.bedarf_stk_m2 ? `${zahl(p.bedarf_stk_m2)} Stk/m²` : "Bedarf je m² fehlt am Produkt"}>{p.menge_stk ? zahl(p.menge_stk, 0) : <span class="faint">–</span>}</td>
                   <td><Zahl wert={p.ep_netto_m2} disabled={!offenBearb} setze={(x) => setPos(i, { ep_netto_m2: x ?? 0 })} class={!p.ep_netto_m2 ? "fehler" : ""} aria-label="Einzelpreis" /></td>
-                  <td><Zahl wert={p.rabatt_proz} disabled={!offenBearb} setze={(x) => setPos(i, { rabatt_proz: x ?? 0 })} aria-label="Rabatt" /></td>
+                  <td title={p.rabatt_manuell ? "von Hand gesetzt" : "laut Staffel"}><Zahl wert={p.rabatt_proz} disabled={!offenBearb} setze={(x) => setPos(i, { rabatt_proz: x ?? 0, rabatt_manuell: true })} aria-label="Rabatt" />
+                    {p.rabatt_manuell && offenBearb && p.produkt_id ? <button class="btn link klein" onClick={() => setPos(i, { rabatt_manuell: false })}>Staffel</button> : <span class="faint klein">{p.produkt_id && p.rabatt_proz ? "Staffel" : ""}</span>}</td>
                   <td class="num">{euro(positionNetto(p))}</td>
-                  <td>{offenBearb && <button class="btn klein link" onClick={() => set({ positionen: e.positionen.filter((_, j) => j !== i) })} aria-label="Position entfernen">×</button>}</td>
+                  <td>{offenBearb && <button class="btn klein link" onClick={() => setPositionen(e.positionen.filter((_, j) => j !== i))} aria-label="Position entfernen">×</button>}</td>
                 </tr>)}
                 {!e.positionen.length && <tr><td colSpan={9} class="leer">Noch keine Positionen.</td></tr>}
               </tbody>
@@ -446,6 +459,8 @@ function VDetail({ v }: { v: Vorgang }) {
           <dl class="dl" style={{ gridTemplateColumns: "1fr auto" }}>
             <dt>Ware netto</dt><dd class="num">{euro(s.waren)}</dd>
             <dt>Fracht netto {offenBearb && <button class="btn link klein" onClick={frachtNachPlz}>nach PLZ</button>}</dt><dd><Zahl wert={e.fracht_netto} disabled={!offenBearb} setze={(x) => set({ fracht_netto: x ?? 0 })} style={{ width: 100, textAlign: "right" }} aria-label="Fracht" /></dd>
+            <dt>Mindermenge {e.mindermenge_manuell && offenBearb && <button class="btn link klein" onClick={() => setPositionen(e.positionen, { mindermenge_manuell: false })}>automatisch</button>}</dt>
+            <dd><Zahl wert={e.mindermenge_netto} disabled={!offenBearb} setze={(x) => set({ mindermenge_netto: x ?? 0, mindermenge_manuell: true })} style={{ width: 100, textAlign: "right" }} aria-label="Mindermengenzuschlag" /></dd>
             <dt>Netto</dt><dd class="num"><b>{euro(s.netto)}</b></dd>
             <dt>MwSt. {mw} %</dt><dd class="num">{euro(s.mwst)}</dd>
             <dt><b>Brutto</b></dt><dd class="num"><b>{euro(s.brutto)}</b></dd>
@@ -461,6 +476,15 @@ function VDetail({ v }: { v: Vorgang }) {
             <dt>Kontakt</dt><dd>{k.email ? <a href={`mailto:${k.email}`}>{k.email}</a> : "–"}{k.telefon && <div><a href={`tel:${k.telefon.replace(/[^\d+]/g, "")}`}>{k.telefon}</a></div>}</dd></dl>
           {q && q.stufe !== "ok" && <ul class="klein" style={{ margin: "8px 0 0", paddingLeft: 18 }}>{[...q.verdacht, ...q.auffaellig, ...q.fehlt.map((f) => `fehlt: ${f}`)].map((x) => <li>{x}</li>)}</ul>}
         </Karte>}
+        {vierAugen && (offenBearb || v.status === "gesendet") && <Karte titel="Vier-Augen-Freigabe" rechts={<span class={`marke ${v.freigabe ? "ok" : "warn"}`}>{v.freigabe ? "freigegeben" : "offen"}</span>}>
+          {v.freigabe ? <p style={{ margin: 0 }}>Freigegeben von <b>{v.freigabe.von}</b>, {datumZeit(v.freigabe.zeit)}.</p> : <>
+            <p class="klein" style={{ marginTop: 0 }}>Ab {euro(d.einstellungen.preise.vier_augen_ab ?? 0)} netto muss eine zweite Person freigeben. Erstellt von <b>{ersteller}</b>.</p>
+            <button class="btn primaer" disabled={z.nurLesen || v.status !== "angebot_erstellt" || ich() === ersteller || geaendert} onClick={freigeben_}>Als {ich()} freigeben</button>
+            {ich() === ersteller && <p class="muted klein" style={{ marginBottom: 0 }}>Sie haben das Angebot erstellt – bitte eine Kollegin oder einen Kollegen freigeben lassen.</p>}
+            {v.status !== "angebot_erstellt" && <p class="muted klein" style={{ marginBottom: 0 }}>Freigabe nach „Angebot erstellt“.</p>}
+          </>}
+          <p class="muted klein" style={{ marginBottom: 0 }}>Hinweis: In der Browser-Version gilt der gewählte Bearbeiter. Mit Anmeldung (Server-Version) ist die Freigabe fest an die Person gebunden.</p>
+        </Karte>}
         {(offenBearb || v.status === "gesendet") && <Karte titel="Prüfung vor Versand" rechts={<span class={`marke ${pruefOk ? "ok" : ""}`}>{Object.keys(v.pruefung).length}/{PRUEFSCHRITTE.length}</span>}>
           <ul class="pruefliste">{PRUEFSCHRITTE.map(([key, text]) => { const p = v.pruefung[key]; return <li style={{ gridTemplateColumns: "24px 1fr" }}>
             <input type="checkbox" checked={!!p} disabled={z.nurLesen || !offenBearb} onChange={() => pruefen(key)} aria-label={text} />
@@ -473,7 +497,61 @@ function VDetail({ v }: { v: Vorgang }) {
         </Karte>
       </div>
     </div>
+    {mailOffen && <MailDialog v={v} onClose={() => setMailOffen(false)} />}
   </>;
+}
+
+function MailDialog({ v, onClose }: { v: Vorgang; onClose: () => void }) {
+  const d = z.daten, a = ab();
+  const k = a.kontakte.get(v.kontakt_id ?? -1);
+  const vorlagen = alleVorlagen(d);
+  const [id, setId] = useState(passendeVorlage(v, k));
+  const vl = vorlagen.find((x) => x.id === id) ?? vorlagen[0];
+  const gefuellt = vorlageFuellen(vl, d, v, k, ich());
+  const [betreff, setBetreff] = useState(gefuellt.betreff);
+  const [text, setText] = useState(gefuellt.text);
+  const lieferanten = d.kontakte.filter((x) => (x.typ === "lieferant" || x.typ === "hersteller") && x.email);
+  const [an, setAn] = useState(id === "bestellung_lieferant" ? lieferanten[0]?.email ?? "" : k?.email ?? "");
+  const [versendet, setVersendet] = useState(false);
+  function waehle(nid: string) {
+    const nvl = vorlagen.find((x) => x.id === nid) ?? vorlagen[0];
+    const g = vorlageFuellen(nvl, d, v, k, ich());
+    setId(nid); setBetreff(g.betreff); setText(g.text); setAn(nid === "bestellung_lieferant" ? lieferanten[0]?.email ?? "" : k?.email ?? "");
+  }
+  const darfVersendet = id === "angebot" && v.status === "angebot_erstellt";
+  function vermerken(wie: string) {
+    aendern((dd, von) => {
+      if (k) { const kk = dd.kontakte.find((x) => x.id === k.id)!; aendere(dd, "kontakte", k.id, { aktivitaeten: [{ zeit: new Date().toISOString(), von, text: `E-Mail „${vl.titel}“ zu ${v.nummer} ${wie}` }, ...(kk.aktivitaeten ?? [])] }, von); }
+    });
+    if (versendet && darfVersendet) wechseln(z.daten.vorgaenge.find((x) => x.id === v.id)!, "gesendet");
+  }
+  const mailto = `mailto:${encodeURIComponent(an)}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text)}`;
+  return <Dialog titel={`E-Mail zu ${v.nummer}`} breit onClose={onClose} fuss={<>
+    <span class="links muted klein">Direkt aus dem ERP senden geht mit der Server-Version (Supabase + E-Mail-Dienst oder Microsoft 365).</span>
+    <button class="btn" onClick={() => { navigator.clipboard?.writeText(text).then(() => { melde("Text kopiert – Betreff steht oben."); vermerken("kopiert"); }, () => melde("Kopieren nicht möglich.", "fehler")); }}>Text kopieren</button>
+    <a class="btn primaer" href={mailto} onClick={() => { vermerken("im Mailprogramm geöffnet"); onClose(); }}><Icon n="mail" />Im Mailprogramm öffnen</a>
+    <button class="btn" disabled title="kommt mit der Server-Version">Direkt senden</button>
+  </>}>
+    <div class="raster" style={{ gridTemplateColumns: "220px 1fr" }}>
+      <div class="raster" style={{ alignContent: "start", gap: 4 }}>
+        {[...new Set(vorlagen.map((x) => x.situation))].map((sit) => <div>
+          <div class="faint klein" style={{ margin: "6px 0 2px" }}>{sit}</div>
+          {vorlagen.filter((x) => x.situation === sit).map((x) => <button class={`chip ${x.id === id ? "an" : ""}`} style={{ width: "100%", borderRadius: 6, marginBottom: 4, justifyContent: "flex-start" }} onClick={() => waehle(x.id)}>{x.titel}</button>)}
+        </div>)}
+        <a class="klein" href="#/einstellungen/vorlagen" onClick={onClose}>Vorlagen bearbeiten</a>
+      </div>
+      <div class="raster" style={{ alignContent: "start" }}>
+        <div class="formular" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <Feld label="An">{id === "bestellung_lieferant" && lieferanten.length ? <Auswahl wert={an} setze={setAn} optionen={lieferanten.map((x) => [x.email, `${kontaktAnzeige(x)} <${x.email}>`] as [string, string])} /> : <input type="email" value={an} onInput={(x) => setAn((x.target as HTMLInputElement).value)} />}</Feld>
+          <Feld label="Betreff"><div class="knopfreihe" style={{ flexWrap: "nowrap" }}><Text wert={betreff} setze={setBetreff} /><button class="btn klein" onClick={() => navigator.clipboard?.writeText(betreff).then(() => melde("Betreff kopiert."))} title="Betreff kopieren">⧉</button></div></Feld>
+        </div>
+        <Feld label="Text (hier noch änderbar)"><textarea rows={16} value={text} onInput={(x) => setText((x.target as HTMLTextAreaElement).value)} style={{ fontSize: 13 }} /></Feld>
+        {/\[[^\]]+\]/.test(text) && <div class="hinweisbox warn klein">Im Text stehen noch Platzhalter in eckigen Klammern, z. B. {text.match(/\[[^\]]+\]/)?.[0]} – bitte ersetzen.</div>}
+        {id === "angebot" && <p class="muted klein" style={{ margin: 0 }}>Das Angebot als PDF über „Angebot ansehen / drucken“ → „Als PDF speichern“ erzeugen und anhängen.</p>}
+        {darfVersendet && <label class="check"><input type="checkbox" checked={versendet} onChange={(x) => setVersendet((x.target as HTMLInputElement).checked)} /> Danach als versendet markieren (wenn Prüfung und Freigabe vollständig sind)</label>}
+      </div>
+    </div>
+  </Dialog>;
 }
 
 function Druck({ v }: { v: Vorgang }) {
@@ -517,6 +595,7 @@ function Druck({ v }: { v: Vorgang }) {
       <table style={{ width: 300, marginLeft: "auto" }}><tbody class="summe">
         <tr class="summe"><td>Ware netto</td><td style={{ textAlign: "right" }}>{euro(s.waren)}</td></tr>
         {v.fracht_netto ? <tr class="summe"><td>Fracht netto</td><td style={{ textAlign: "right" }}>{euro(v.fracht_netto)}</td></tr> : null}
+        {v.mindermenge_netto ? <tr class="summe"><td>Mindermengenzuschlag</td><td style={{ textAlign: "right" }}>{euro(v.mindermenge_netto)}</td></tr> : null}
         <tr class="summe"><td>Summe netto</td><td style={{ textAlign: "right" }}>{euro(s.netto)}</td></tr>
         <tr class="summe"><td>MwSt. {an.mwst_proz} %</td><td style={{ textAlign: "right" }}>{euro(s.mwst)}</td></tr>
         <tr class="summe"><td><b>Gesamt brutto</b></td><td style={{ textAlign: "right" }}><b>{euro(s.brutto)}</b></td></tr>
