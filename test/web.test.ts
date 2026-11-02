@@ -10,7 +10,7 @@ import { produkteCsv, produktImportPlanen, produktImportAusfuehren } from "../we
 import { kontaktImportPlanen, kontaktImportAusfuehren } from "../web/lib/kontaktcsv.ts";
 import { positionRechnen, summen, naechsteNummer } from "../web/lib/angebot.ts";
 import { erkenneWerte } from "../web/lib/datenblatt.ts";
-import { exportKandidaten, alsExportiertMarkieren } from "../web/lib/woo.ts";
+import { exportKandidaten, alsExportiertMarkieren, wooPaket } from "../web/lib/woo.ts";
 
 const bestand = JSON.parse(readFileSync(new URL("../data/bestand-2026-11-02.json", import.meta.url), "utf8"));
 const T0 = "2026-11-02T10:00:00.000Z";
@@ -181,4 +181,72 @@ test("Shop-Stand: nur neue Produkte werden übernommen", async () => {
   assert.equal(r.steine, 1);
   assert.equal(d.produkte.length, vorher + 1);
   assert.equal(shopVergleichen(d, b2).neu.length, 0);
+});
+
+test("Hersteller-Sichtbarkeit: Standard, Ausnahme am Produkt, Export ohne Herstellername", async () => {
+  const { herstellerSichtbar } = await import("../web/lib/modell.ts");
+  const { textVorschlag } = { textVorschlag: null as any };
+  const d = structuredClone(basis);
+  const p = d.produkte.find((x) => x.status === "freigegeben" && x.stein_id && d.steine.find((s) => s.id === x.stein_id)!.hersteller_id)!;
+  const s = d.steine.find((x) => x.id === p.stein_id)!;
+  const h = d.hersteller.find((x) => x.id === s.hersteller_id)!;
+  assert.equal(herstellerSichtbar(p, h), true);
+  // Hersteller ausblenden → betroffene Produkte erscheinen im Paket, ohne Namen
+  aendere(d, "hersteller", h.id, { im_shop_anzeigen: false, sichtbarkeit_geaendert_am: new Date().toISOString() }, "Klaus");
+  const k = exportKandidaten(d);
+  assert.ok(k.offen.some((x) => x.p.id === p.id));
+  const paket = wooPaket(d, k.offen, "Klaus");
+  const e = paket.eintraege.find((x: any) => x.sku === p.sku) as any;
+  assert.equal(e.hersteller_anzeigen, false);
+  assert.equal(e.hersteller, null);
+  assert.ok(!JSON.stringify(e).includes(h.name));
+  // Ausnahme am Produkt
+  assert.equal(herstellerSichtbar({ ...p, hersteller_im_shop: "anzeigen" }, h), true);
+  // Hersteller fehlt ist keine Pflicht mehr
+  const { REGELN } = await import("../web/lib/pruefung.ts");
+  assert.equal(REGELN.hersteller.schwere, "empfohlen");
+  void textVorschlag;
+});
+
+test("Referenzen: neue freigegebene Referenz kommt ins Paket", () => {
+  const d = structuredClone(basis);
+  const s = d.steine[0];
+  d.referenzen.push({ id: 9_100_001, version: 1, erstellt_am: T0, geaendert_am: T0, geaendert_von: "Tobi", woo_id: null, woo_slug: "", name: "Einfamilienhaus Rhede", objektart: "Einfamilienhaus",
+    rubriken: ["EFH + DHH"], stein_id: s.id, hbr_code_shop: null, bilder: [], status: "freigegeben", ort: "Rhede", beschreibung: "Neubau", zuletzt_exportiert_version: null });
+  const k = exportKandidaten(d);
+  assert.equal(k.referenzen.length, 1);
+  const e = wooPaket(d, [], "Tobi", undefined, k.referenzen).eintraege[0] as any;
+  assert.equal(e.typ, "referenz");
+  assert.deepEqual(e.kategorien, ["Referenzen", "Referenzen EFH + DHH"]);
+  assert.ok(e.verlinkt.length >= 1);
+  alsExportiertMarkieren(d, [], "Tobi", undefined, [9_100_001]);
+  assert.equal(exportKandidaten(d).referenzen.length, 0);
+});
+
+test("KI-Datenblatt: Schema und Prüfung der Antwort", async () => {
+  const { schema, vorschlaege, aufSteinAnwenden } = await import("../web/lib/ki.ts");
+  const { OBERFLAECHEN } = await import("../web/lib/modell.ts");
+  const sc = schema(basis, OBERFLAECHEN) as any;
+  assert.equal(sc.additionalProperties, false);
+  assert.deepEqual([...sc.required].sort(), Object.keys(sc.properties).sort()); // alle Felder Pflicht, keine optionalen
+  const unions = Object.values(sc.properties).filter((p: any) => Array.isArray(p.type)).length;
+  assert.ok(unions <= 16);
+  const roh = {
+    art: "verblender", hersteller: "Vandersanden", bezeichnung_hersteller: "Kolumba", artikelnr_hersteller: "", herstellungsart: "handform",
+    farben: ["rot", "lila"], formate: ["WDF", "XYZ"], oberflaechen: ["besandet"], laenge_mm: 210, breite_mm: 100, hoehe_mm: 65, gewicht_kg: 2.1,
+    druckfestigkeit_nmm2: 25, wasseraufnahme_proz: 99, frostwiderstand: "F2", bedarf_stk_m2: 73, riemchen_staerke_mm: null,
+    herstellertext: "Ein Handformstein.", beschreibung_vorschlag: "Sachlicher Text.", belege: [{ feld: "laenge_mm", zitat: "210 x 100 x 65 mm" }], unsicher: "",
+  } as any;
+  const { liste, hinweise } = vorschlaege(roh, basis, OBERFLAECHEN);
+  const v = Object.fromEntries(liste.map((x) => [x.feld, x.wert]));
+  assert.equal(basis.hersteller.find((h) => h.id === v.hersteller_id)?.name, "Vandersanden Klinker");
+  assert.deepEqual(v.farben, ["rot"]);          // unbekannte Farbe verworfen
+  assert.deepEqual(v.formate, ["WDF"]);         // unbekanntes Format verworfen
+  assert.equal(v.wasseraufnahme_proz, undefined); // unplausibel → nicht übernommen
+  assert.ok(hinweise.some((h) => h.includes("Wasseraufnahme")));
+  assert.equal(liste.find((x) => x.feld === "laenge_mm")!.warnung, undefined);
+  assert.ok(liste.find((x) => x.feld === "druckfestigkeit_nmm2")!.warnung); // ohne Zitat
+  const patch = aufSteinAnwenden(basis.steine[0], liste);
+  assert.equal(patch.hersteller_quelle, "datenblatt");
+  assert.equal((patch as any).formate, undefined); // Formate gehören zum Produkt
 });

@@ -168,3 +168,7 @@ export async function sha256(b: Blob): Promise<string> {
   const h = await crypto.subtle.digest("SHA-256", await b.arrayBuffer());
   return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
+
+// ---------- KI-Schlüssel (nur dieser Browser, nie in Sicherungen) ----------
+export const kiSchluesselLesen = () => kvLesen<string>("ki_schluessel");
+export const kiSchluesselSpeichern = (s: string | undefined) => kvSchreiben("ki_schluessel", s);

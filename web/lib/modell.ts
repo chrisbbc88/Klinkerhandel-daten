@@ -11,7 +11,9 @@ export type ProduktStatus = "entwurf" | "pruefung" | "freigegeben" | "archiviert
 
 export interface Basis { id: number; version: number; erstellt_am: string; geaendert_am: string; geaendert_von: string }
 
-export interface Hersteller { id: number; name: string; hbr_praefix: string | null; woo_kategorie_id: number | null; geaendert_am?: string }
+/** im_shop_anzeigen: Standard für alle Produkte dieses Herstellers, ob der Hersteller im Shop sichtbar ist. */
+export interface Hersteller { id: number; name: string; hbr_praefix: string | null; woo_kategorie_id: number | null; im_shop_anzeigen: boolean; sichtbarkeit_geaendert_am?: string; geaendert_am?: string }
+export type HerstellerImShop = "standard" | "anzeigen" | "ausblenden";
 export interface Farbe { schluessel: string; woo_kategorie_id: number | null }
 export interface Format { kuerzel: string; name: string; mm: [number, number, number] | null; woo_kategorie_id: number | null }
 
@@ -45,6 +47,8 @@ export interface Produkt extends Basis {
   riemchen_staerke_mm: number | null; eckriemchen: boolean | null;
   kurztext: string; beschreibung: string; kurztext_shop_alt: string;
   preise: Preis[];
+  /** standard = Einstellung des Herstellers übernehmen */
+  hersteller_im_shop: HerstellerImShop;
   zuletzt_exportiert_version: number | null;
   zuletzt_exportiert_am?: string;
 }
@@ -55,6 +59,8 @@ export interface Referenz extends Basis {
   woo_id: number | null; woo_slug: string; name: string; objektart: string | null;
   rubriken: string[]; stein_id: number | null; hbr_code_shop: string | null; bilder: number[];
   status: "entwurf" | "freigegeben" | "archiviert";
+  ort: string; beschreibung: string;
+  zuletzt_exportiert_version: number | null; zuletzt_exportiert_am?: string;
 }
 
 export interface Hinweis {
@@ -91,6 +97,7 @@ export interface Einstellungen {
   firma: { name: string; strasse: string; plz: string; ort: string; telefon: string; email: string; web: string; ust_id: string };
   angebot: { mwst_proz: number; verschnitt_proz: number; gueltig_tage: number; nummer_praefix: string; fusstext: string };
   bearbeiter: string[];
+  ki: { modell: string };
 }
 
 export interface Daten {
@@ -138,6 +145,7 @@ export const STANDARD_EINSTELLUNGEN: Einstellungen = {
   firma: { name: "Klinkerhandel Harbecke Rhede", strasse: "", plz: "", ort: "Rhede", telefon: "", email: "", web: "klinkerhandel.de", ust_id: "" },
   angebot: { mwst_proz: 19, verschnitt_proz: 5, gueltig_tage: 30, nummer_praefix: "AN", fusstext: "Alle Preise netto zzgl. gesetzlicher MwSt. Lieferzeit nach Verfügbarkeit beim Werk." },
   bearbeiter: ["Klaus", "Tobi", "Sven", "Assistenz", "Christian"],
+  ki: { modell: "claude-sonnet-5-5" },
 };
 
 const leer = { bezeichnung_hersteller: "", artikelnr_hersteller: "", oberflaechen: [] as string[], laenge_mm: null, breite_mm: null, hoehe_mm: null,
@@ -151,7 +159,7 @@ export function datenAusBestand(bestand: Bestand, jetzt = new Date().toISOString
 
 export function datenAusPlan(plan: Plan, jetzt: string, von: string): Daten {
   const basis = (id: number): Basis => ({ id, version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von });
-  const hersteller: Hersteller[] = plan.hersteller.map((h, i) => ({ id: i + 1, name: h.name, hbr_praefix: h.hbr_praefix, woo_kategorie_id: h.woo_kategorie_id }));
+  const hersteller: Hersteller[] = plan.hersteller.map((h, i) => ({ id: i + 1, name: h.name, hbr_praefix: h.hbr_praefix, woo_kategorie_id: h.woo_kategorie_id, im_shop_anzeigen: true }));
   const hId = new Map(hersteller.map((h) => [h.name, h.id]));
   const bilder: Bild[] = plan.bilder.map((b, i) => ({ id: i + 1, woo_media_id: b.woo_media_id, datei: b.datei, breite_px: b.breite_px, alt: b.alt ?? "" }));
   const bId = new Map(bilder.map((b) => [b.woo_media_id, b.id]));
@@ -166,12 +174,12 @@ export function datenAusPlan(plan: Plan, jetzt: string, von: string): Daten {
     hersteller_id: p.hersteller ? hId.get(p.hersteller) ?? null : null, woo_id: p.woo_id, woo_slug: p.woo_slug,
     status: p.sku ? "freigegeben" : "entwurf", formate: [...p.formate], bilder: p.bilder.map((b) => bId.get(b.woo_media_id)!),
     riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: p.kurztext_shop_alt,
-    preise: [], zuletzt_exportiert_version: 1,
+    preise: [], hersteller_im_shop: "standard", zuletzt_exportiert_version: 1,
   }));
   const referenzen: Referenz[] = plan.referenzen.map((r, i) => ({
     ...basis(i + 1), woo_id: r.woo_id, woo_slug: r.woo_slug, name: r.name, objektart: r.objektart, rubriken: [...r.rubriken],
     stein_id: r.stein ? sId.get(r.stein) ?? null : null, hbr_code_shop: r.hbr_code_shop, bilder: r.bilder.map((b) => bId.get(b.woo_media_id)!),
-    status: "freigegeben",
+    status: "freigegeben", ort: "", beschreibung: "", zuletzt_exportiert_version: 1,
   }));
   // Nur Hinweise übernehmen, die sich nicht aus den Daten selbst laufend neu prüfen lassen (siehe pruefung.ts).
   const LIVE = new Set(["hersteller_fehlt", "herstellungsart_fehlt", "farbe_fehlt", "format_fehlt", "bild_fehlt", "bilder_wenige",
@@ -233,4 +241,25 @@ export function naechsterCode(d: Daten, praefix: string): string {
   for (const s of d.steine) if (s.hbr_code.slice(4, 6) === praefix) max = Math.max(max, Number(s.hbr_code.slice(7)));
   for (const p of d.produkte) { const m = p.name.match(/HBR (\d{2})-(\d{3})/); if (m && m[1] === praefix) max = Math.max(max, Number(m[2])); }
   return `HBR ${praefix}-${String(max + 1).padStart(3, "0")}`;
+}
+
+export const HERSTELLER_IM_SHOP: Record<HerstellerImShop, string> = { standard: "wie beim Hersteller", anzeigen: "anzeigen", ausblenden: "ausblenden" };
+export const REFERENZ_RUBRIKEN = ["EFH + DHH", "MFH", "Geschäftshäuser", "Landhaus", "Modern", "Langformate"];
+export const OBJEKTARTEN = ["Einfamilienhaus", "Doppelhaus", "Doppelhaushälfte", "Bungalow", "Mehrfamilienhaus", "Geschäftshaus", "Landhaus", "Gewerbe", "Sanierung", "Sonstiges"];
+
+/** Ist der Hersteller dieses Produkts im Shop sichtbar? */
+export function herstellerSichtbar(p: Pick<Produkt, "hersteller_im_shop" | "hersteller_id">, hersteller: Hersteller | undefined): boolean {
+  if (p.hersteller_im_shop === "anzeigen") return true;
+  if (p.hersteller_im_shop === "ausblenden") return false;
+  return hersteller ? hersteller.im_shop_anzeigen !== false : false;
+}
+
+/** Ergänzt Felder, die ältere Stände (Browser oder Sicherungsdatei) noch nicht haben. Ändert keine vorhandenen Werte. */
+export function normalisieren(d: Daten): Daten {
+  d.geloescht ??= [];
+  d.einstellungen = { ...structuredClone(STANDARD_EINSTELLUNGEN), ...d.einstellungen, ki: { ...STANDARD_EINSTELLUNGEN.ki, ...(d.einstellungen?.ki ?? {}) } };
+  for (const h of d.hersteller) h.im_shop_anzeigen ??= true;
+  for (const p of d.produkte) p.hersteller_im_shop ??= "standard";
+  for (const r of d.referenzen) { r.ort ??= ""; r.beschreibung ??= ""; r.zuletzt_exportiert_version ??= r.woo_id ? r.version : null; }
+  return d;
 }

@@ -20,7 +20,7 @@ export function ImportExport() {
   const [datei, setDatei] = useState<{ name: string; text: string } | null>(null);
   const [neueAnlegen, setNeueAnlegen] = useState(true);
   const [nurProbleme, setNurProbleme] = useState(true);
-  const [paketIds, setPaketIds] = useState<number[] | null>(null);
+  const [paketIds, setPaketIds] = useState<{ p: number[]; r: number[] } | null>(null);
   const [shop, setShop] = useState<{ v: ShopVergleich; b: Bestand; name: string } | null>(null);
   const exp = exportKandidaten(d);
   const heute = new Date().toISOString().slice(0, 10);
@@ -46,16 +46,17 @@ export function ImportExport() {
     if (ok) { melde(`Import übernommen: ${r.geaendert} geändert, ${r.neu} neu.`); setPlan(null); setDatei(null); }
   }
 
+  const anzahlOffen = exp.offen.length + exp.referenzen.length;
   function paket() {
-    const k = exp.offen;
-    if (!k.length) return;
-    herunterladen(`woocommerce-paket_${heute}.json`, JSON.stringify(wooPaket(d, k, ich()), null, 2));
-    setPaketIds(k.map((x) => x.p.id));
+    if (!anzahlOffen) return;
+    herunterladen(`woocommerce-paket_${heute}.json`, JSON.stringify(wooPaket(d, exp.offen, ich(), undefined, exp.referenzen), null, 2));
+    setPaketIds({ p: exp.offen.map((x) => x.p.id), r: exp.referenzen.map((x) => x.r.id) });
   }
   async function markieren() {
     if (!paketIds) return;
-    if (!(await frage(`Nur bestätigen, wenn das Paket mit ${paketIds.length} Produkten im Shop eingespielt wurde. Danach gelten diese Produkte als abgeglichen.`, "Im Shop eingespielt?", "Ja, eingespielt"))) return;
-    aendern((dd, von) => alsExportiertMarkieren(dd, paketIds, von), `${paketIds.length} Produkte als abgeglichen markiert.`);
+    const n = paketIds.p.length + paketIds.r.length;
+    if (!(await frage(`Nur bestätigen, wenn das Paket mit ${paketIds.p.length} Produkten und ${paketIds.r.length} Referenzen im Shop eingespielt wurde. Danach gelten sie als abgeglichen.`, "Im Shop eingespielt?", "Ja, eingespielt"))) return;
+    aendern((dd, von) => alsExportiertMarkieren(dd, paketIds.p, von, undefined, paketIds.r), `${n} Einträge als abgeglichen markiert.`);
     setPaketIds(null);
   }
 
@@ -139,18 +140,19 @@ export function ImportExport() {
       </div>
     </Karte>}
 
-    <Karte titel="WooCommerce-Paket" rechts={<span class="marke">{exp.offen.length} offen</span>}>
+    <Karte titel="WooCommerce-Paket" rechts={<span class="marke">{anzahlOffen} offen</span>}>
       <div class="raster r-2-1">
         <div>
-          <p style={{ marginTop: 0 }}>Enthält alle <b>freigegebenen</b> Produkte, die seit dem letzten Abgleich geändert oder neu angelegt wurden, und archivierte Shop-Produkte zum Ausblenden. Preise werden nicht übertragen (Shop im Katalogmodus).</p>
+          <p style={{ marginTop: 0 }}>Enthält alle <b>freigegebenen</b> Produkte und Referenzen, die seit dem letzten Abgleich geändert oder neu angelegt wurden, und archivierte Shop-Produkte zum Ausblenden. Preise werden nicht übertragen (Shop im Katalogmodus).</p>
           {exp.offen.length > 0 && <table class="t" style={{ marginBottom: 12 }}>
             <thead><tr><th>Artikelnummer</th><th>Art</th><th>Aktion</th></tr></thead>
             <tbody>{exp.offen.slice(0, 15).map(({ p, grund }) => <tr class="klickbar" onClick={() => geheZu(`produkte/${p.id}`)}><td class="mono">{p.sku}</td><td>{ART[p.art]}</td><td><span class={`marke ${grund === "neu" ? "info" : grund === "ausblenden" ? "warn" : ""}`}>{grund === "neu" ? "anlegen (Entwurf)" : grund === "ausblenden" ? "ausblenden" : "aktualisieren"}</span></td></tr>)}</tbody>
           </table>}
           {exp.offen.length > 15 && <p class="muted klein">… und {exp.offen.length - 15} weitere</p>}
-          {exp.zurueckgehalten.length > 0 && <p class="muted klein">{exp.zurueckgehalten.length} geänderte Produkte sind noch nicht freigegeben und werden zurückgehalten.</p>}
+          {exp.referenzen.length > 0 && <p class="klein"><b>{exp.referenzen.length} Referenzen:</b> {exp.referenzen.slice(0, 8).map((x) => x.r.name).join(" · ")}{exp.referenzen.length > 8 ? " …" : ""}</p>}
+          {exp.zurueckgehalten.length + exp.referenzenZurueck.length > 0 && <p class="muted klein">{exp.zurueckgehalten.length} Produkte und {exp.referenzenZurueck.length} Referenzen sind geändert, aber noch nicht freigegeben, und werden zurückgehalten.</p>}
           <div class="knopfreihe">
-            <button class="btn dunkel" disabled={!exp.offen.length} onClick={paket}><Icon n="download" />Paket herunterladen</button>
+            <button class="btn dunkel" disabled={!anzahlOffen} onClick={paket}><Icon n="download" />Paket herunterladen</button>
             {paketIds && <button class="btn primaer" onClick={markieren}><Icon n="check" />Im Shop eingespielt – als abgeglichen markieren</button>}
           </div>
         </div>

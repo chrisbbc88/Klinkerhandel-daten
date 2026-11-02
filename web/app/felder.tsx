@@ -1,12 +1,12 @@
 // Formularfelder für Stein und Produkt (gemeinsam für Erfassen und Bearbeiten).
 import { z } from "./store.ts";
 import { Feld, Text, Zahl, Auswahl, Chips } from "./ui.tsx";
-import { HERSTELLUNG, STATUS, OBERFLAECHEN, type Stein, type Produkt } from "../lib/modell.ts";
+import { HERSTELLUNG, STATUS, OBERFLAECHEN, herstellerSichtbar, type Stein, type Produkt, type HerstellerImShop } from "../lib/modell.ts";
 
 export function SteinStamm({ s, set }: { s: Stein; set: (p: Partial<Stein>) => void }) {
   const d = z.daten;
   return <div class="formular">
-    <Feld label="Hersteller *"><Auswahl wert={s.hersteller_id ? String(s.hersteller_id) : ""} setze={(v) => set({ hersteller_id: v ? Number(v) : null, hersteller_quelle: "manuell" })} optionen={d.hersteller.map((h) => [String(h.id), h.name] as [string, string])} leer="– wählen –" /></Feld>
+    <Feld label="Hersteller"><Auswahl wert={s.hersteller_id ? String(s.hersteller_id) : ""} setze={(v) => set({ hersteller_id: v ? Number(v) : null, hersteller_quelle: "manuell" })} optionen={d.hersteller.map((h) => [String(h.id), h.name] as [string, string])} leer="– wählen –" /></Feld>
     <Feld label="Herstellungsart *"><Auswahl wert={s.herstellungsart ?? ""} setze={(v) => set({ herstellungsart: (v || null) as Stein["herstellungsart"] })} optionen={HERSTELLUNG} leer="– wählen –" /></Feld>
     <Feld label="Bezeichnung beim Hersteller"><Text wert={s.bezeichnung_hersteller} setze={(v) => set({ bezeichnung_hersteller: v })} placeholder="z. B. Kolumba Hellgrau" /></Feld>
     <Feld label="Artikelnr. beim Hersteller"><Text wert={s.artikelnr_hersteller} setze={(v) => set({ artikelnr_hersteller: v })} /></Feld>
@@ -35,6 +35,7 @@ export function ProduktStamm({ p, set }: { p: Produkt; set: (x: Partial<Produkt>
   return <div class="formular">
     <Feld label="Name im Shop" klasse="breit"><Text wert={p.name} setze={(v) => set({ name: v })} /></Feld>
     <Feld label="Status"><Auswahl wert={p.status} setze={(v) => set({ status: v })} optionen={STATUS} /></Feld>
+    <HerstellerImShopFeld wert={p.hersteller_im_shop} herstellerId={p.hersteller_id} setze={(v) => set({ hersteller_im_shop: v })} />
     <Feld label="Artikelnummer" hinweis="wird aus dem HBR-Code gebildet"><input type="text" value={p.sku ?? ""} disabled /></Feld>
     {p.art === "riemchen" && <>
       <Feld label="Riemchenstärke mm"><Zahl wert={p.riemchen_staerke_mm} setze={(v) => set({ riemchen_staerke_mm: v })} /></Feld>
@@ -49,6 +50,7 @@ export function ProduktStamm({ p, set }: { p: Produkt; set: (x: Partial<Produkt>
 /** Vorschlag für einen Beschreibungstext aus den Stammdaten (zum Weiterbearbeiten, keine KI). */
 export function textVorschlag(p: Produkt, s: Stein | undefined, hersteller: string): string {
   if (!s) return "";
+  if (!herstellerSichtbar(p, z.daten.hersteller.find((h) => h.id === s.hersteller_id))) hersteller = ""; // Hersteller im Shop ausgeblendet → nicht im Text nennen
   const art = p.art === "riemchen" ? "Klinkerriemchen" : "Klinker";
   const h = s.herstellungsart ? { handform: "handgeformte", strangpress: "stranggepresste", wasserstrich: "wasserstrichgeformte" }[s.herstellungsart] : "";
   const farben = s.farben.length ? s.farben.join(", ").replace(/, ([^,]*)$/, " und $1") : "";
@@ -60,4 +62,14 @@ export function textVorschlag(p: Produkt, s: Stein | undefined, hersteller: stri
     s.bedarf_stk_m2 ? `Bedarf: ca. ${s.bedarf_stk_m2} Stück je m².` : "",
   ];
   return teile.filter(Boolean).join(" ");
+}
+
+/** Auswahl, ob der Hersteller im Shop erscheint. Standard folgt der Einstellung beim Hersteller (Einstellungen › Stammdaten). */
+export function HerstellerImShopFeld({ wert, herstellerId, setze }: { wert: HerstellerImShop; herstellerId: number | null; setze: (v: HerstellerImShop) => void }) {
+  const h = z.daten.hersteller.find((x) => x.id === herstellerId);
+  const standard = h ? (h.im_shop_anzeigen ? "anzeigen" : "ausblenden") : "kein Hersteller";
+  const effektiv = herstellerSichtbar({ hersteller_im_shop: wert, hersteller_id: herstellerId }, h);
+  return <Feld label="Hersteller im Shop" hinweis={h ? (effektiv ? `${h.name} wird im Shop angezeigt` : "Hersteller bleibt intern, Kunden sehen ihn nicht") : undefined}>
+    <Auswahl wert={wert} setze={setze} optionen={[["standard", `Standard (${standard})`], ["anzeigen", "anzeigen"], ["ausblenden", "ausblenden"]]} />
+  </Feld>;
 }

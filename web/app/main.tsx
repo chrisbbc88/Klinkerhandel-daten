@@ -8,13 +8,17 @@ import { Dashboard } from "./dashboard.tsx";
 import { Bestand } from "./produkte.tsx";
 import { ProduktDetail } from "./produkt.tsx";
 import { Erfassen } from "./erfassen.tsx";
-import { PreisPflege, HinweisListe, Referenzen, SteinCodes } from "./bereiche.tsx";
+import { PreisPflege, HinweisListe, SteinCodes } from "./bereiche.tsx";
+import { ReferenzListe, ReferenzNeu, ReferenzDetail } from "./referenzen.tsx";
 import { ImportExport } from "./importexport.tsx";
 import { KontaktListe, KontaktDetail } from "./kontakte.tsx";
 import { VorgangListe, NeuerVorgang, VorgangDetail } from "./vorgaenge.tsx";
 import { Einstellungen } from "./einstellungen.tsx";
 import { ImportDialog, SicherungsBanner } from "./sicherung.tsx";
 import type { KontaktTyp } from "../lib/modell.ts";
+
+declare const __VERSION__: string;
+const VERSION = typeof __VERSION__ !== "undefined" ? __VERSION__ : "Entwicklung";
 import type { Bestand as ShopBestand } from "../../src/import/bestand.ts";
 
 const BESTAND: ShopBestand = JSON.parse(document.getElementById("shop-bestand")!.textContent!);
@@ -82,11 +86,12 @@ function Palette({ schliessen }: { schliessen: () => void }) {
   const d = z.daten;
   const t = q.trim().toLowerCase();
   const seiten = [["Dashboard", ""], ["Produktbestand", "produkte"], ["Produkt erfassen", "produkte/neu"], ["Preise", "produkte/preise"], ["Import & Export", "produkte/export"], ["Hinweise", "produkte/hinweise"],
-    ["Referenzen", "produkte/referenzen"], ["Kunden", "kontakte/kunde"], ["Hersteller-Kontakte", "kontakte/hersteller"], ["Anfragen & Angebote", "angebote"], ["Neue Anfrage", "angebote/neu"], ["Sicherung", "einstellungen/sicherung"], ["Stammdaten", "einstellungen/stammdaten"]];
+    ["Referenzen", "produkte/referenzen"], ["Neue Referenz", "produkte/referenzen/neu"], ["Kunden", "kontakte/kunde"], ["Hersteller-Kontakte", "kontakte/hersteller"], ["Anfragen & Angebote", "angebote"], ["Neue Anfrage", "angebote/neu"], ["Sicherung", "einstellungen/sicherung"], ["Stammdaten", "einstellungen/stammdaten"]];
   const treffer: { text: string; typ: string; ziel: string }[] = !t ? seiten.map(([x, z2]) => ({ text: x, typ: "Seite", ziel: z2 })) : [
     ...seiten.filter(([x]) => x.toLowerCase().includes(t)).map(([x, z2]) => ({ text: x, typ: "Seite", ziel: z2 })),
     ...d.produkte.filter((p) => `${p.sku ?? ""} ${p.name}`.toLowerCase().includes(t)).slice(0, 12).map((p) => ({ text: `${p.sku ?? ""} ${p.sku ? "" : p.name}`.trim(), typ: p.art === "riemchen" ? "Riemchen" : "Produkt", ziel: `produkte/${p.id}` })),
     ...d.kontakte.filter((k) => `${kontaktName(k)} ${k.email} ${k.ort}`.toLowerCase().includes(t)).slice(0, 8).map((k) => ({ text: kontaktName(k), typ: "Kontakt", ziel: `kontakte/k/${k.id}` })),
+    ...d.referenzen.filter((r) => r.name.toLowerCase().includes(t)).slice(0, 6).map((r) => ({ text: r.name, typ: "Referenz", ziel: `produkte/referenzen/${r.id}` })),
     ...d.vorgaenge.filter((v) => `${v.nummer} ${v.betreff}`.toLowerCase().includes(t)).slice(0, 8).map((v) => ({ text: `${v.nummer} ${v.betreff}`, typ: "Vorgang", ziel: `angebote/${v.id}` })),
   ];
   const los = (x: { ziel: string } | undefined) => { if (x) { geheZu(x.ziel); schliessen(); } };
@@ -118,7 +123,7 @@ function Inhalt({ route }: { route: string[] }) {
     if (r1 === "neu") return <Erfassen key={key} />;
     if (r1 === "preise") return <PreisPflege />;
     if (r1 === "hinweise") return <HinweisListe />;
-    if (r1 === "referenzen") return <Referenzen />;
+    if (r1 === "referenzen") return r2 === "neu" ? <ReferenzNeu key={key} /> : r2 ? <ReferenzDetail id={Number(r2)} /> : <ReferenzListe />;
     if (r1 === "export") return <ImportExport />;
     return <ProduktDetail id={Number(r1)} reiter={r2} />;
   }
@@ -169,6 +174,7 @@ function App() {
       <button class="btn" onClick={() => z.frage!.antwort(false)}>Abbrechen</button>
       <button class={`btn ${z.frage.gefahr ? "gefahr" : "primaer"}`} onClick={() => z.frage!.antwort(true)} autoFocus>{z.frage.ok}</button>
     </>}><p style={{ margin: 0 }}>{z.frage.text}</p></Dialog>}
+    <a class="versionsmarke" href="#/einstellungen/info" title="Programmversion und Erstellungszeitpunkt">{VERSION}</a>
     <div class="meldungen" role="status" aria-live="polite">{z.meldungen.map((m) => <div class={`meldung ${m.art}`}>{m.text}</div>)}</div>
     {menue && <div class="schleier" style={{ zIndex: 35 }} onClick={() => setMenue(false)} />}
   </div>;

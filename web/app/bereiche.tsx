@@ -161,41 +161,6 @@ export function HinweisListe() {
   </>;
 }
 
-// ---------- Referenzen ----------
-export function Referenzen() {
-  const d = z.daten, a = ab();
-  const [q, setQ] = useState(""); const [nurOhne, setNurOhne] = useState(false); const [seite, setSeite] = useState(0);
-  const liste = d.referenzen.filter((r) => (!nurOhne || !r.stein_id) && (!q || `${r.name} ${r.hbr_code_shop ?? ""} ${r.objektart ?? ""}`.toLowerCase().includes(q.toLowerCase())));
-  const steinSetzen = (id: number, code: string) => {
-    const s = d.steine.find((x) => x.hbr_code === code.trim().toUpperCase());
-    if (code.trim() && !s) { melde(`Stein ${code} nicht gefunden.`, "fehler"); return; }
-    aendern((dd, von) => aendere(dd, "referenzen", id, { stein_id: s?.id ?? null }, von), s ? `Mit ${s.hbr_code} verknüpft.` : "Verknüpfung entfernt.");
-  };
-  return <>
-    <Seitenkopf titel="Referenzen" text={`${d.referenzen.length} Objektfotos aus dem Shop. Verknüpft mit dem verbauten Stein, erscheinen sie später am Produkt.`} />
-    <Karte ohnePadding>
-      <div class="filterleiste">
-        <input type="search" placeholder="Suche" value={q} onInput={(e) => { setQ((e.target as HTMLInputElement).value); setSeite(0); }} />
-        <label class="check"><input type="checkbox" checked={nurOhne} onChange={(e) => { setNurOhne((e.target as HTMLInputElement).checked); setSeite(0); }} /> nur ohne Stein ({d.referenzen.filter((r) => !r.stein_id).length})</label>
-      </div>
-      <table class="t">
-        <thead><tr><th></th><th>Name</th><th>Rubrik</th><th>Stein</th><th>Bilder</th></tr></thead>
-        <tbody>{liste.slice(seite * 50, seite * 50 + 50).map((r) => { const b = r.bilder[0] ? a.bilder.get(r.bilder[0]) : undefined; const s = r.stein_id ? a.steine.get(r.stein_id) : undefined; return <tr>
-          <td>{b ? <img class="bild" src={bildUrl(b.datei)} alt="" loading="lazy" /> : <span class="bild" />}</td>
-          <td>{r.name}</td>
-          <td class="klein muted">{r.rubriken.join(", ") || r.objektart || "–"}</td>
-          <td><SteinFeld wert={s?.hbr_code ?? ""} setze={(c) => steinSetzen(r.id, c)} /></td>
-          <td class="num">{r.bilder.length}</td>
-        </tr>; })}</tbody>
-      </table>
-      <Seiten seite={seite} setSeite={setSeite} gesamt={liste.length} proSeite={50} />
-    </Karte>
-  </>;
-}
-function SteinFeld({ wert, setze }: { wert: string; setze: (v: string) => void }) {
-  const [t, setT] = useState(wert);
-  return <Feld label=""><input type="text" class="mono" style={{ width: 130 }} list="stein-codes" value={t} placeholder="HBR 12-345" onInput={(e) => setT((e.target as HTMLInputElement).value)} onBlur={() => { if (t !== wert) setze(t); }} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} /></Feld>;
-}
 export function SteinCodes() {
   return <datalist id="stein-codes">{z.daten.steine.map((s) => <option value={s.hbr_code} />)}</datalist>;
 }

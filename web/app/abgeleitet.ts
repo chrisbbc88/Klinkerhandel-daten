@@ -30,7 +30,7 @@ export function ab(): Abgeleitet {
     produkte: new Map(d.produkte.map((p) => [p.id, p])),
     kontakte: new Map(d.kontakte.map((k) => [k.id, k])),
     hinweiseOffen: d.hinweise.filter((h) => h.status === "offen" && h.schwere !== "info").length,
-    exportOffen: exportKandidaten(d).offen.length,
+    exportOffen: (() => { const k = exportKandidaten(d); return k.offen.length + k.referenzen.length; })(),
     vorgaengeOffen: d.vorgaenge.filter((v) => !["angenommen", "abgelehnt", "archiviert"].includes(v.status)).length,
   };
   return cache;

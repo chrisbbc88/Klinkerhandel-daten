@@ -1,7 +1,7 @@
 // Produkte als CSV: Export für Excel und Import mit Vorschau. Ohne Browser-Abhängigkeiten.
 import { csvText, csvLesen, zahlLesen, zahlText, LEEREN } from "./csv.ts";
 import {
-  aktuellerPreis, heute, produktName, steinLeer, skuFuer, HERSTELLUNG, ART, STATUS, OBERFLAECHEN,
+  aktuellerPreis, heute, produktName, steinLeer, skuFuer, HERSTELLUNG, ART, STATUS, OBERFLAECHEN, HERSTELLER_IM_SHOP,
   type Daten, type Produkt, type Stein, type Preis, type ProduktArt,
 } from "./modell.ts";
 import { aendere, lege_an, neueId } from "./aendern.ts";
@@ -42,6 +42,7 @@ export const SPALTEN: Spalte[] = [
   { kopf: "status", label: "Status", ziel: "produkt", feld: "status", get: (p) => STATUS[p.status], lesen: auswahl(STATUS, "Status") },
   { kopf: "hersteller", label: "Hersteller", ziel: "stein", feld: "hersteller_id", get: (_p, s, d) => d.hersteller.find((h) => h.id === s?.hersteller_id)?.name ?? "",
     lesen: (t, d) => { const h = d.hersteller.find((h) => h.name.toLowerCase() === t.trim().toLowerCase()); return h ? { wert: h.id } : { fehler: `Hersteller „${t}“ unbekannt – erst unter Einstellungen › Stammdaten anlegen` }; } },
+  { kopf: "hersteller_im_shop", label: "Hersteller im Shop", ziel: "produkt", feld: "hersteller_im_shop", get: (p) => HERSTELLER_IM_SHOP[p.hersteller_im_shop], lesen: auswahl(HERSTELLER_IM_SHOP, "Hersteller im Shop") },
   { kopf: "herstellungsart", label: "Herstellungsart", ziel: "stein", feld: "herstellungsart", get: (_p, s) => (s?.herstellungsart ? HERSTELLUNG[s.herstellungsart] : ""), lesen: auswahl(HERSTELLUNG, "Herstellungsart") },
   { kopf: "farben", label: "Farben", ziel: "stein", feld: "farben", get: (_p, s) => s?.farben.join(", ") ?? "", lesen: liste((d) => d.farben.map((f) => f.schluessel), "Farbe") },
   { kopf: "formate", label: "Formate", ziel: "produkt", feld: "formate", get: (p) => p.formate.join(", "), lesen: liste((d) => d.formate.map((f) => f.kuerzel), "Format") },
@@ -159,7 +160,7 @@ export function produktImportPlanen(d: Daten, text: string, optionen: { neueAnle
       if (t === LEEREN) {
         if (sp.kopf === "name") { zeile.fehler.push("Name kann nicht geleert werden"); continue; }
         if (sp.ziel === "preis") { zeile.fehler.push("Preise können nicht geleert werden – neuen Preis eintragen"); continue; }
-        if (sp.kopf === "status") { zeile.fehler.push("Status kann nicht geleert werden"); continue; }
+        if (sp.kopf === "status" || sp.kopf === "hersteller_im_shop") { zeile.fehler.push(`${sp.label} kann nicht geleert werden`); continue; }
         neu = ["farben", "formate", "oberflaechen"].includes(sp.feld!) ? []
           : ["kurztext", "beschreibung", "bezeichnung_hersteller", "artikelnr_hersteller"].includes(sp.feld!) ? "" : null;
       } else {
@@ -208,7 +209,7 @@ export function produktImportAusfuehren(d: Daten, plan: ImportPlan, von: string,
         id: neueId(), version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von,
         stein_id: s.id, art: z.neu.art, sku: skuFuer(z.neu.hbr_code, z.neu.art), name: produktName(z.neu.hbr_code, z.neu.art, s.herstellungsart),
         hersteller_id: s.hersteller_id, woo_id: null, woo_slug: "", status: "entwurf", formate: [], bilder: [],
-        riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: "", preise: [], zuletzt_exportiert_version: null,
+        riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: "", preise: [], hersteller_im_shop: "standard", zuletzt_exportiert_version: null,
       } satisfies Produkt, von, jetzt);
       neu++;
     } else geaendert++;
@@ -240,6 +241,7 @@ export function wertText(v: unknown, d: Daten, spalte: string): string {
   if (spalte === "hersteller") return d.hersteller.find((h) => h.id === v)?.name ?? String(v);
   if (spalte === "herstellungsart") return HERSTELLUNG[v as keyof typeof HERSTELLUNG] ?? String(v);
   if (spalte === "status") return STATUS[v as keyof typeof STATUS] ?? String(v);
+  if (spalte === "hersteller_im_shop") return HERSTELLER_IM_SHOP[v as keyof typeof HERSTELLER_IM_SHOP] ?? String(v);
   if (typeof v === "boolean") return v ? "ja" : "nein";
   if (typeof v === "number") return zahlText(v);
   const s = String(v);

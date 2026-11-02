@@ -3,7 +3,7 @@ import { useMemo, useState } from "preact/hooks";
 import { z, aendern, frage } from "./store.ts";
 import { ab, herstellerName } from "./abgeleitet.ts";
 import { Seitenkopf, Karte, Icon, Farbpunkt, Score, Seiten, useSortierung, queryParam, geheZu, Auswahl, relZeit } from "./ui.tsx";
-import { ART, STATUS, HERSTELLUNG, aktuellerPreis, type Produkt, type ProduktStatus, type Herstellungsart } from "../lib/modell.ts";
+import { ART, STATUS, HERSTELLUNG, HERSTELLER_IM_SHOP, aktuellerPreis, herstellerSichtbar, type Produkt, type ProduktStatus, type Herstellungsart, type HerstellerImShop } from "../lib/modell.ts";
 import { REGELN } from "../lib/pruefung.ts";
 import { aendere } from "../lib/aendern.ts";
 import { produkteCsv } from "../lib/produktcsv.ts";
@@ -96,7 +96,7 @@ export function Bestand() {
                 <td>{b ? <img class="bild" src={bildUrl(b.datei)} alt="" loading="lazy" /> : <span class="bild" />}</td>
                 <td><span class="mono">{p.sku ?? <span class="marke bad">ohne Nr.</span>}</span>{!p.sku && <div class="klein muted">{p.name.slice(0, 50)}</div>}</td>
                 <td>{ART[p.art]}</td>
-                <td>{herstellerName(s?.hersteller_id) || <span class="faint">–</span>}</td>
+                <td>{herstellerName(s?.hersteller_id) || <span class="faint">–</span>}{s?.hersteller_id && !herstellerSichtbar(p, a.hersteller.get(s.hersteller_id)) && <span class="marke" title="Im Shop ausgeblendet" style={{ marginLeft: 6 }}>intern</span>}</td>
                 <td>{s?.herstellungsart ? HERSTELLUNG[s.herstellungsart] : <span class="faint">–</span>}</td>
                 <td><span class="chips" style={{ gap: 3 }}>{s?.farben.map((x) => <Farbpunkt f={x} />)}</span></td>
                 <td class="klein">{p.formate.join(", ")}</td>
@@ -130,6 +130,7 @@ function Sammel({ auswahl, setAuswahl, gefiltert }: { auswahl: Set<number>; setA
     farbe_minus: { label: "Farbe entfernen", werte: d.farben.map((f) => [f.schluessel, f.schluessel]), stein: true },
     format_plus: { label: "Format hinzufügen", werte: d.formate.map((f) => [f.kuerzel, f.kuerzel]), stein: false },
     status: { label: "Status setzen", werte: Object.entries(STATUS), stein: false },
+    himshop: { label: "Hersteller im Shop", werte: Object.entries(HERSTELLER_IM_SHOP), stein: false },
   };
 
   async function anwenden() {
@@ -152,6 +153,7 @@ function Sammel({ auswahl, setAuswahl, gefiltert }: { auswahl: Set<number>; setA
       }
       for (const p of o.stein ? [] : gewaehlt) {
         if (aktion === "status") aendere(dd, "produkte", p.id, { status: wert as ProduktStatus }, von);
+        if (aktion === "himshop") aendere(dd, "produkte", p.id, { hersteller_im_shop: wert as HerstellerImShop }, von);
         if (aktion === "format_plus" && !p.formate.includes(wert)) aendere(dd, "produkte", p.id, { formate: [...p.formate, wert] }, von);
       }
     }, `${o.label}: erledigt.`);

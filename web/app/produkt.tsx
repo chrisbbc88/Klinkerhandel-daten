@@ -4,7 +4,10 @@ import { z, aendern, frage, melde, ich } from "./store.ts";
 import { ab, herstellerName, feldLabel, aenderungZeile } from "./abgeleitet.ts";
 import { Seitenkopf, Karte, Icon, Feld, Zahl, Auswahl, Score, geheZu, datum, datumZeit, relZeit, Text, initialen } from "./ui.tsx";
 import { SteinStamm, SteinTechnik, ProduktStamm, textVorschlag } from "./felder.tsx";
-import { DatenblattAbgleich } from "./datenblatt.tsx";
+import { GepruefteDatenblaetter } from "./datenblatt.tsx";
+import { KiDatenblatt, type GeladeneDatei } from "./ki.tsx";
+import { aufSteinAnwenden, type KiVorschlag } from "../lib/ki.ts";
+import { ReferenzenZumStein } from "./referenzen.tsx";
 import { ART, STATUS, aktuellerPreis, heute, type Produkt, type Stein, type Preis } from "../lib/modell.ts";
 import { pruefeProdukt, pruefeStein } from "../lib/pruefung.ts";
 import { aendere, neueId, loesche } from "../lib/aendern.ts";
@@ -136,6 +139,7 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
             <dt>VK</dt><dd>{aktuellerPreis(p, "vk") ? euro(aktuellerPreis(p, "vk")!.betrag) : "–"}</dd>
           </dl>
         </Karte>
+        {s && <ReferenzenZumStein steinId={s.id} />}
         <Karte titel="Aktionen">
           <div class="knopfreihe">
             <a class="btn klein" href={`#/angebote/neu?produkt=${p.id}`}><Icon n="angebote" />In neues Angebot</a>
@@ -148,7 +152,7 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
 
     {reiter === "bilder" && <Bilder p={p} />}
     {reiter === "preise" && <Preise p={p} />}
-    {reiter === "datenblatt" && (s ? <DatenblattAbgleich stein={s} /> : <Karte><p>Diesem Produkt ist kein Stein zugeordnet.</p></Karte>)}
+    {reiter === "datenblatt" && (s ? <DatenblattReiter p={p} s={s} /> : <Karte><p>Diesem Produkt ist kein Stein zugeordnet.</p></Karte>)}
     {reiter === "hinweise" && <Hinweise p={p} s={s} pruef={pruef} />}
     {reiter === "verlauf" && <Verlauf p={p} s={s} />}
   </>;
@@ -315,3 +319,23 @@ function Verlauf({ p, s }: { p: Produkt; s?: Stein }) {
 }
 
 
+
+function DatenblattReiter({ p, s }: { p: Produkt; s: Stein }) {
+  const aktuell = (feld: string): unknown => feld === "art" ? p.art : ["formate", "riemchen_staerke_mm", "beschreibung"].includes(feld) ? (p as any)[feld] : (s as any)[feld] ?? null;
+  function uebernehmen(gewaehlt: KiVorschlag[], datei: GeladeneDatei) {
+    const steinPatch = aufSteinAnwenden(s, gewaehlt);
+    const prodPatch: Partial<Produkt> = {};
+    for (const v of gewaehlt) if (v.ziel === "produkt" && !(v.feld === "riemchen_staerke_mm" && p.art !== "riemchen")) (prodPatch as any)[v.feld] = v.wert;
+    const felder = gewaehlt.filter((v) => v.ziel !== "art").map((v) => v.feld);
+    aendern((dd, von) => {
+      aendere(dd, "steine", s.id, { ...steinPatch, datenblaetter: [...s.datenblaetter.filter((x) => x.sha256 !== datei.sha), { dateiname: datei.name, sha256: datei.sha, geprueft_am: new Date().toISOString(), geprueft_von: von, felder }] }, von, s.version);
+      if (steinPatch.hersteller_id !== undefined) for (const g of dd.produkte) if (g.stein_id === s.id) aendere(dd, "produkte", g.id, { hersteller_id: steinPatch.hersteller_id }, von);
+      if (Object.keys(prodPatch).length) aendere(dd, "produkte", p.id, prodPatch, von, p.version);
+    }, felder.length ? `${felder.length} Werte übernommen, Datenblatt als geprüft vermerkt.` : "Datenblatt als geprüft vermerkt.");
+  }
+  return <div class="raster">
+    <KiDatenblatt titel={`Datenblatt abgleichen – Stein ${s.hbr_code}`} knopfText="Übernehmen und als geprüft vermerken" aktuell={aktuell} onUebernehmen={uebernehmen} />
+    <p class="muted klein" style={{ margin: 0 }}>Werte am Stein gelten für Verblender und Riemchen gemeinsam. Formate und Beschreibung werden nur bei diesem Produkt ({p.sku}) gesetzt.</p>
+    <GepruefteDatenblaetter stein={s} />
+  </div>;
+}

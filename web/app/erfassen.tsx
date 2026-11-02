@@ -3,10 +3,12 @@ import { useState } from "preact/hooks";
 import { z, aendern, melde } from "./store.ts";
 import { ab, herstellerName } from "./abgeleitet.ts";
 import { Seitenkopf, Karte, Feld, Auswahl, Zahl, Icon, queryParam, geheZu, Chips } from "./ui.tsx";
-import { SteinStamm, SteinTechnik, textVorschlag } from "./felder.tsx";
+import { SteinStamm, SteinTechnik, textVorschlag, HerstellerImShopFeld } from "./felder.tsx";
 import { HBR, ART, naechsterCode, steinLeer, skuFuer, produktName, heute, type Produkt, type ProduktArt, type Stein } from "../lib/modell.ts";
 import { pruefeStein, pruefeProdukt } from "../lib/pruefung.ts";
-import { lege_an, neueId } from "../lib/aendern.ts";
+import { lege_an, neueId, aendere } from "../lib/aendern.ts";
+import { KiDatenblatt, type GeladeneDatei } from "./ki.tsx";
+import type { KiVorschlag } from "../lib/ki.ts";
 
 export function Erfassen() {
   const d = z.daten, a = ab();
@@ -26,6 +28,40 @@ export function Erfassen() {
   const [vk, setVk] = useState<number | null>(null);
   const [ek, setEk] = useState<number | null>(null);
   const [status, setStatus] = useState<"entwurf" | "pruefung">("entwurf");
+  const [himshop, setHimshop] = useState<Produkt["hersteller_im_shop"]>("standard");
+  const [datenblatt, setDatenblatt] = useState<{ name: string; sha: string; felder: string[] } | null>(null);
+
+  function aktuellerWert(feld: string): unknown {
+    if (feld === "formate") return formate;
+    if (feld === "riemchen_staerke_mm") return staerke;
+    if (feld === "beschreibung") return beschreibung;
+    if (feld === "art") return art;
+    return (stein as any)[feld] ?? null;
+  }
+  function ausDatenblatt(gewaehlt: KiVorschlag[], datei: GeladeneDatei) {
+    let st: Stein = { ...stein };
+    const uebernommen: string[] = [];
+    for (const v of gewaehlt) {
+      if (v.ziel === "stein") { if (vorhanden) continue; (st as any)[v.feld] = v.wert; }
+      else if (v.feld === "formate") setFormate(v.wert as string[]);
+      else if (v.feld === "riemchen_staerke_mm") setStaerke(v.wert as number);
+      else if (v.feld === "beschreibung") setBeschreibung(v.wert as string);
+      else if (v.feld === "art" && !vorhanden) setArt(v.wert as ProduktArt);
+      uebernommen.push(v.feld);
+    }
+    if (!vorhanden && gewaehlt.some((v) => v.feld === "hersteller_id")) {
+      st.hersteller_quelle = "datenblatt";
+      const h = d.hersteller.find((x) => x.id === st.hersteller_id);
+      if (h?.hbr_praefix && h.hbr_praefix !== praefix) { // Nummer aus dem Präfix des Herstellers vergeben
+        const c = naechsterCode(d, h.hbr_praefix);
+        setPraefix(h.hbr_praefix); setCode(c); st.hbr_code = c;
+      }
+    }
+    if (!vorhanden && !st.laenge_mm) { const mm = d.formate.find((f) => f.kuerzel === (gewaehlt.find((v) => v.feld === "formate")?.wert as string[] | undefined)?.[0])?.mm; if (mm) { st.laenge_mm = mm[0]; st.breite_mm = mm[1]; st.hoehe_mm = mm[2]; } }
+    setStein(st);
+    setDatenblatt({ name: datei.name, sha: datei.sha, felder: uebernommen });
+    melde(`${uebernommen.length} Werte ins Formular übernommen. Bitte prüfen und dann anlegen.`);
+  }
 
   function praefixWaehlen(pr: string) {
     setPraefix(pr);
@@ -45,7 +81,7 @@ export function Erfassen() {
   const vorschauP: Produkt = {
     id: 0, version: 1, erstellt_am: "", geaendert_am: "", geaendert_von: "", stein_id: 0, art, sku: skuFuer(code, art), name: produktName(code, art, stein.herstellungsart),
     hersteller_id: stein.hersteller_id, woo_id: null, woo_slug: "", status, formate, bilder: [], riemchen_staerke_mm: art === "riemchen" ? staerke : null, eckriemchen: null,
-    kurztext: "", beschreibung, kurztext_shop_alt: "", preise: [], zuletzt_exportiert_version: null,
+    kurztext: "", beschreibung, kurztext_shop_alt: "", preise: [], hersteller_im_shop: himshop, zuletzt_exportiert_version: null,
   };
   const pruef = [...pruefeStein(stein), ...pruefeProdukt(vorschauP, d)].filter((x) => x.regel !== "bild" && x.regel !== "bilder3" && x.regel !== "alt");
   const doppeltArt = vorhanden && (a.geschwister.get(vorhanden.id) ?? []).some((p) => p.art === art);
@@ -58,8 +94,12 @@ export function Erfassen() {
       const jetzt = new Date().toISOString();
       let sid = vorhanden?.id;
       if (!sid) {
-        const s = lege_an(dd, "steine", { ...stein, id: neueId(), hbr_code: code, version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von }, von);
+        const s = lege_an(dd, "steine", { ...stein, id: neueId(), hbr_code: code, version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von,
+          datenblaetter: datenblatt ? [{ dateiname: datenblatt.name, sha256: datenblatt.sha, geprueft_am: jetzt, geprueft_von: von, felder: datenblatt.felder }] : [] }, von);
         sid = s.id;
+      } else if (datenblatt) {
+        const s = dd.steine.find((x) => x.id === sid)!;
+        aendere(dd, "steine", sid, { datenblaetter: [...s.datenblaetter.filter((x) => x.sha256 !== datenblatt.sha), { dateiname: datenblatt.name, sha256: datenblatt.sha, geprueft_am: jetzt, geprueft_von: von, felder: datenblatt.felder }] }, von);
       }
       const preise = [
         ...(vk ? [{ id: neueId(), preisart: "vk" as const, betrag: vk, einheit: "m2" as const, gueltig_ab: heute(), quelle: "manuell" as const, erfasst_von: von, erfasst_am: jetzt }] : []),
@@ -83,6 +123,10 @@ export function Erfassen() {
       <a class="btn" href="#/produkte">Abbrechen</a>
       <button class="btn primaer" disabled={!!codeFehler || !!doppeltArt || z.nurLesen} onClick={anlegen}><Icon n="check" />Anlegen</button>
     </Seitenkopf>
+    <div style={{ marginBottom: 16 }}>
+      <KiDatenblatt titel="Datenblatt einlesen (optional)" knopfText="Ins Formular übernehmen" aktuell={aktuellerWert} onUebernehmen={ausDatenblatt} />
+      {datenblatt && <p class="muted klein" style={{ margin: "6px 0 0" }}>Datenblatt „{datenblatt.name}“ wird beim Anlegen als geprüft am Stein vermerkt.</p>}
+    </div>
     <div class="raster r-2-1">
       <div class="raster">
         <Karte titel="1 · Nummer und Art">
@@ -92,6 +136,7 @@ export function Erfassen() {
               <input type="text" class={`mono ${codeFehler ? "fehler" : ""}`} value={code} disabled={!!vorhanden} onInput={(e) => { const v = (e.target as HTMLInputElement).value.toUpperCase(); setCode(v); setStein({ ...stein, hbr_code: v }); }} />
             </Feld>
             <Feld label="Art"><Auswahl wert={art} setze={setArt} optionen={[["verblender", "Verblender"], ["riemchen", "Riemchen"], ["daemmklinker", "Dämmklinker"]]} /></Feld>
+            <HerstellerImShopFeld wert={himshop} herstellerId={stein.hersteller_id} setze={setHimshop} />
             <Feld label="Status nach dem Anlegen"><Auswahl wert={status} setze={setStatus} optionen={[["entwurf", "Entwurf"], ["pruefung", "Zur Prüfung"]]} /></Feld>
             {art === "verblender" && !vorhanden && <label class="check breit"><input type="checkbox" checked={auchRiemchen} onChange={(e) => setAuchRiemchen((e.target as HTMLInputElement).checked)} /> Zusätzlich als Riemchen ({code} R) anlegen</label>}
             {doppeltArt && <div class="hinweisbox bad breit">Zu {code} gibt es bereits ein {ART[art]}.</div>}

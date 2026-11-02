@@ -1,5 +1,5 @@
 // Sicherung als JSON: prüfen, vergleichen, zusammenführen. Ohne Browser-Abhängigkeiten, daher testbar.
-import { FORMAT_KENNUNG, SCHEMA_VERSION, type Daten } from "./modell.ts";
+import { FORMAT_KENNUNG, SCHEMA_VERSION, normalisieren, type Daten } from "./modell.ts";
 
 export function sicherungsText(d: Daten): string {
   return JSON.stringify(d);
@@ -16,7 +16,7 @@ export function pruefeSicherung(roh: unknown): { ok: true; daten: Daten } | { ok
     if (!Array.isArray(d[t])) return { ok: false, fehler: `Die Sicherung ist unvollständig: „${t}“ fehlt.` };
   if (!d.produkte!.length && !d.kontakte!.length)
     return { ok: false, fehler: "Die Sicherung enthält weder Produkte noch Kontakte. Zum Schutz vor Datenverlust wird sie nicht eingespielt." };
-  return { ok: true, daten: { geloescht: [], ...d } as Daten };
+  return { ok: true, daten: normalisieren({ geloescht: [], ...d } as Daten) };
 }
 
 type MitId = { id: number; geaendert_am?: string; version?: number };

@@ -1,6 +1,6 @@
 // Zentraler Zustand der Anwendung: Daten, Speichern, Sicherung, Meldungen.
 import { useEffect, useState } from "preact/hooks";
-import { datenAusBestand, STANDARD_EINSTELLUNGEN, type Daten } from "../lib/modell.ts";
+import { datenAusBestand, normalisieren, type Daten } from "../lib/modell.ts";
 import { Konflikt } from "../lib/aendern.ts";
 import { pruefeSicherung, sicherungsText } from "../lib/sicherung.ts";
 import {
@@ -195,9 +195,7 @@ export async function starten(bestand: Bestand) {
       d = datenAusBestand(bestand, new Date().toISOString(), "Übernahme");
       if (!z.nurLesen) await speichereDaten(d);
     }
-    d.geloescht ??= [];
-    d.einstellungen = { ...structuredClone(STANDARD_EINSTELLUNGEN), ...d.einstellungen };
-    z.daten = d;
+    z.daten = normalisieren(d);
     z.ordner = await ordnerStatus();
     z.bereit = true;
     (navigator.storage as any)?.persist?.().catch(() => {});

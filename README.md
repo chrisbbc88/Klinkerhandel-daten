@@ -4,6 +4,8 @@ ERP für Klinkerhandel Harbecke Rhede. Erster Baustein: Produktdaten pflegen, mi
 
 Ausführliche Projektdokumentation: [`docs/ERP-Dokumentation.md`](docs/ERP-Dokumentation.md)
 
+Aktuelle Version und Änderungen: [`CHANGELOG.md`](CHANGELOG.md) – die Version steht in der Testversion unten rechts.
+
 ## Zwei Ausprägungen, ein Datenmodell
 
 1. **Testversion im Browser** (`index.html`, für GitHub Pages): läuft ohne Server, Daten liegen im Browser des jeweiligen Rechners. Austausch zwischen Kollegen über JSON-Sicherungen mit Zusammenführen. Zum Testen des Produktkonzepts mit dem Kunden.

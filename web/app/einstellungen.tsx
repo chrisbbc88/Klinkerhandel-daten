@@ -2,7 +2,11 @@
 import { useState } from "preact/hooks";
 import { z, aendern, frage, melde, geraetAendern, ich } from "./store.ts";
 import { ab } from "./abgeleitet.ts";
-import { Seitenkopf, Karte, Feld, Text, Zahl, Icon } from "./ui.tsx";
+import { Seitenkopf, Karte, Feld, Text, Zahl, Icon, Auswahl } from "./ui.tsx";
+import { useEffect } from "preact/hooks";
+import { kiSchluesselLesen, kiSchluesselSpeichern } from "../lib/speicher.ts";
+import { kiSchluesselVergessen } from "./ki.tsx";
+import { KI_MODELLE, API_URL } from "../lib/ki.ts";
 import { SicherungSeite } from "./sicherung.tsx";
 import { kontaktLeer, type Einstellungen as E } from "../lib/modell.ts";
 import { aendere, lege_an, neueId } from "../lib/aendern.ts";
@@ -56,6 +60,7 @@ function Allgemein() {
         <Feld label="USt-IdNr."><Text wert={e.firma.ust_id} setze={(v) => f({ ust_id: v })} /></Feld>
       </div>
     </Karte>
+    <KiEinstellung modell={e.ki.modell} setModell={(m) => setE({ ...e, ki: { modell: m } })} />
     <Karte titel="Angebote">
       <div class="formular">
         <Feld label="MwSt. %"><Zahl wert={e.angebot.mwst_proz} setze={(v) => an({ mwst_proz: v ?? 19 })} /></Feld>
@@ -98,7 +103,7 @@ function Stammdaten() {
     if (neu.praefix && (!/^\d{2}$/.test(neu.praefix) || d.hersteller.some((h) => h.hbr_praefix === neu.praefix))) { melde("Präfix ungültig oder schon vergeben.", "fehler"); return; }
     let hid = 0;
     const ok = aendern((dd, von) => {
-      const h = lege_an(dd, "hersteller", { id: neueId(), name: neu.name.trim(), hbr_praefix: null, woo_kategorie_id: null, geaendert_am: new Date().toISOString() }, von);
+      const h = lege_an(dd, "hersteller", { id: neueId(), name: neu.name.trim(), hbr_praefix: null, woo_kategorie_id: null, im_shop_anzeigen: true, geaendert_am: new Date().toISOString() }, von);
       hid = h.id;
       lege_an(dd, "kontakte", { ...kontaktLeer(neueId(), "hersteller", h.name, new Date().toISOString(), von, h.id), aktivitaeten: [] }, von);
     }, "Hersteller angelegt (inkl. Kontakt).");
@@ -107,13 +112,14 @@ function Stammdaten() {
   }
 
   return <div class="raster r2">
-    <Karte titel="Hersteller und HBR-Präfixe" ohnePadding>
+    <Karte titel="Hersteller und HBR-Präfixe" ohnePadding rechts={<span class="muted klein">„Im Shop zeigen“ gilt für alle Produkte des Herstellers, außer am Produkt ist etwas anderes eingestellt.</span>}>
       <table class="t">
-        <thead><tr><th>Hersteller</th><th style={{ width: 90 }}>Präfix</th><th class="num">Steine</th></tr></thead>
+        <thead><tr><th>Hersteller</th><th style={{ width: 90 }}>Präfix</th><th class="num">Steine</th><th title="Standard für alle Produkte dieses Herstellers; am Produkt änderbar">Im Shop zeigen</th></tr></thead>
         <tbody>{d.hersteller.map((h) => <tr>
           <td>{h.name}</td>
           <td><PraefixFeld wert={h.hbr_praefix ?? ""} setze={(v) => praefixSetzen(h.id, v)} /></td>
           <td class="num">{d.steine.filter((s) => s.hersteller_id === h.id).length}</td>
+          <td><label class="check"><input type="checkbox" checked={h.im_shop_anzeigen} disabled={z.nurLesen} onChange={(e) => { const v = (e.target as HTMLInputElement).checked; aendern((dd, von) => aendere(dd, "hersteller", h.id, { im_shop_anzeigen: v, sichtbarkeit_geaendert_am: new Date().toISOString() }, von), `${h.name}: im Shop ${v ? "sichtbar" : "ausgeblendet"} (Standard).`); }} />{h.im_shop_anzeigen ? "ja" : "nein"}</label></td>
         </tr>)}</tbody>
       </table>
       <div class="filterleiste" style={{ borderTop: "1px solid var(--line)", borderBottom: 0 }}>
@@ -147,6 +153,7 @@ function Info() {
     <Karte titel="Klinkerhandel ERP – Testversion im Browser">
       <dl class="dl">
         <dt>Programmversion</dt><dd class="mono">{typeof __VERSION__ !== "undefined" ? __VERSION__ : "Entwicklung"}</dd>
+        <dt>Versionsregel</dt><dd>Jede ausgelieferte index.html bekommt eine neue Versionsnummer; sie steht unten rechts auf jeder Seite.</dd>
         <dt>Datenformat</dt><dd>Schema {d.schema}</dd>
         <dt>Shop-Stand der Übernahme</dt><dd>{d.shop_stand ? new Date(d.shop_stand).toLocaleString("de-DE") : "–"}</dd>
         <dt>Datenmenge</dt><dd>{(groesse / 1024 / 1024).toFixed(1).replace(".", ",")} MB · {d.produkte.length} Produkte · {d.kontakte.length} Kontakte · {d.vorgaenge.length} Vorgänge · {d.aenderungen.length} Protokolleinträge</dd>
@@ -163,4 +170,50 @@ function Info() {
       </ul>
     </Karte>
   </div>;
+}
+
+function KiEinstellung({ modell, setModell }: { modell: string; setModell: (m: string) => void }) {
+  const [vorhanden, setVorhanden] = useState<boolean | null>(null);
+  const [neu, setNeu] = useState("");
+  const [test, setTest] = useState<string | null>(null);
+  useEffect(() => { kiSchluesselLesen().then((k) => setVorhanden(!!k)).catch(() => setVorhanden(false)); }, []);
+  async function speichern() {
+    const k = neu.trim();
+    if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k)) { melde("Das sieht nicht wie ein Claude-API-Schlüssel aus (beginnt mit sk-ant-).", "fehler"); return; }
+    await kiSchluesselSpeichern(k); kiSchluesselVergessen(); setNeu(""); setVorhanden(true); melde("Schlüssel in diesem Browser gespeichert.");
+  }
+  async function entfernen() {
+    if (!(await frage("Den Schlüssel aus diesem Browser entfernen? KI-Auslesen ist danach hier nicht mehr möglich.", "Schlüssel entfernen", "Entfernen", true))) return;
+    await kiSchluesselSpeichern(undefined); kiSchluesselVergessen(); setVorhanden(false); setTest(null);
+  }
+  async function testen() {
+    setTest("Teste…");
+    const k = await kiSchluesselLesen();
+    try {
+      const r = await fetch(API_URL, { method: "POST", headers: { "content-type": "application/json", "x-api-key": k ?? "", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: modell, max_tokens: 5, messages: [{ role: "user", content: "Antworte nur mit OK." }] }) });
+      const j = await r.json().catch(() => null);
+      setTest(r.ok ? `Verbindung funktioniert (${modell}).` : `Fehler ${r.status}: ${j?.error?.message ?? "unbekannt"}`);
+    } catch { setTest("Keine Verbindung zur Claude-API."); }
+  }
+  return <Karte titel="KI: Datenblätter auslesen" rechts={<span class={`marke ${vorhanden ? "ok" : ""}`}>{vorhanden ? "eingerichtet" : "nicht eingerichtet"}</span>}>
+    <p class="muted" style={{ marginTop: 0 }}>Für „Mit KI auslesen“ beim Erfassen und im Reiter Datenblatt. Abgerechnet wird über Ihr Konto in der Claude Console (ca. 2–5 Cent je Datenblatt mit Sonnet).</p>
+    <div class="formular">
+      <Feld label="Modell" klasse="breit"><Auswahl wert={modell} setze={setModell} optionen={KI_MODELLE} /></Feld>
+      <Feld label={vorhanden ? "Neuen Schlüssel eintragen (ersetzt den alten)" : "Claude-API-Schlüssel"} klasse="breit" hinweis="Wird nur in diesem Browser auf diesem Rechner gespeichert – nicht in Sicherungsdateien, nicht auf GitHub.">
+        <input type="password" autoComplete="off" spellcheck={false} placeholder="sk-ant-…" value={neu} onInput={(x) => setNeu((x.target as HTMLInputElement).value)} />
+      </Feld>
+    </div>
+    <div class="knopfreihe" style={{ marginTop: 10 }}>
+      <button class="btn dunkel" disabled={!neu.trim()} onClick={speichern}>Schlüssel speichern</button>
+      {vorhanden && <button class="btn" onClick={testen}>Verbindung testen</button>}
+      {vorhanden && <button class="btn gefahr" onClick={entfernen}>Entfernen</button>}
+      {test && <span class="klein">{test}</span>}
+    </div>
+    <ul class="muted klein" style={{ marginBottom: 0, paddingLeft: 18 }}>
+      <li>Empfehlung: in der Claude Console einen eigenen Schlüssel nur für das ERP anlegen und ein monatliches Ausgabenlimit setzen.</li>
+      <li>Jeder, der an diesem Rechner in diesem Browser das ERP öffnet, kann den Schlüssel nutzen. Auf gemeinsam genutzten Rechnern nach der Arbeit entfernen.</li>
+      <li>Die Modellauswahl gilt für alle (wird mit den Einstellungen gespeichert), der Schlüssel nur hier.</li>
+    </ul>
+  </Karte>;
 }

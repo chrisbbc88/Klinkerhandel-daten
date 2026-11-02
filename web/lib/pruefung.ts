@@ -5,7 +5,7 @@ import { aktuellerPreis, type Daten, type Produkt, type Stein } from "./modell.t
 export interface Pruefpunkt { regel: string; schwere: "pflicht" | "empfohlen"; text: string }
 
 export const REGELN: Record<string, { text: string; schwere: "pflicht" | "empfohlen"; gilt: "stein" | "produkt" }> = {
-  hersteller: { text: "Hersteller fehlt", schwere: "pflicht", gilt: "stein" },
+  hersteller: { text: "Hersteller fehlt", schwere: "empfohlen", gilt: "stein" },
   herstellungsart: { text: "Herstellungsart fehlt", schwere: "pflicht", gilt: "stein" },
   farbe: { text: "Keine Farbe", schwere: "pflicht", gilt: "stein" },
   sku: { text: "Keine Artikelnummer", schwere: "pflicht", gilt: "produkt" },

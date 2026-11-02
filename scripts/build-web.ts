@@ -11,13 +11,13 @@ const bestandDatei = process.argv[2] ?? "data/bestand-2026-11-02.json";
 const bestand = readFileSync(pfad(bestandDatei), "utf8");
 JSON.parse(bestand); // muss gültiges JSON sein
 
-const stand = new Date().toISOString().slice(0, 16).replace("T", " ");
+const stand = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", dateStyle: "medium", timeStyle: "short" }).format(new Date());
 const ergebnis = await build({
   entryPoints: [pfad("web/app/main.tsx")],
   bundle: true, minify: true, write: false, format: "iife", platform: "browser",
   target: ["chrome109", "edge109", "firefox115", "safari16"],
   jsx: "automatic", jsxImportSource: "preact",
-  define: { __VERSION__: JSON.stringify(`${pkg.version} (${stand})`) },
+  define: { __VERSION__: JSON.stringify(`v${pkg.version} · ${stand}`) },
   legalComments: "none", logLevel: "warning",
 });
 const js = ergebnis.outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
