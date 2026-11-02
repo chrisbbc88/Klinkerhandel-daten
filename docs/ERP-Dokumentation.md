@@ -128,6 +128,28 @@ Rechte werden auf dem Server geprüft, nicht über ausgeblendete Knöpfe. Rollen
 
 ---
 
+### Testversion im Browser (GitHub Pages) – Stand 02.11.2026
+
+Auf Wunsch (Test mit dem Kunden über einen GitHub-Link) gibt es zusätzlich zur Server-Version eine Testversion, die vollständig im Browser läuft. Sie dient dazu, das Produktkonzept mit Klaus, Tobi, Sven und der Assistenz zu prüfen, bevor der Server steht.
+
+| Thema | Lösung in der Testversion | Grenze |
+|---|---|---|
+| Auslieferung | eine Datei `index.html` (Preact + TypeScript, mit esbuild gebaut), Shop-Stand eingebettet | — |
+| Speicherung | IndexedDB im Browser, je Rechner und Browser getrennt; zweiter Tab nur lesend (Web Locks) | Browserdaten löschen = Daten weg → Sicherung |
+| Sicherung | JSON-Datei; Sicherungsordner auf dem Rechner (File System Access API, Chrome/Edge), automatisch alle 15/30/60/120 Minuten, nur wenn sich etwas geändert hat; Kontrolle durch Zurücklesen; sonst Download mit Erinnerung | Firefox/Safari: nur Download |
+| Austausch im Team | Import mit Vorschau. **Zusammenführen:** je Datensatz gewinnt die jüngere Änderung, Löschvermerke bleiben, gleiche HBR-Nummer/Artikelnummer/Vorgangsnummer mit unterschiedlicher ID wird nicht übernommen, sondern gemeldet. **Ersetzen:** nur mit Sicherung des alten Stands. Liegt der Sicherungsordner in einem gemeinsamen Cloud-Ordner, meldet das ERP neuere Stände der Kollegen. | kein gleichzeitiges Arbeiten an derselben Datenbank; Konflikte werden nach „jüngste Änderung gewinnt“ je Datensatz gelöst |
+| Gleichzeitige Bearbeitung | Versionsnummer je Datensatz; Speichern mit veralteter Version wird abgelehnt | — |
+| Nachvollziehbarkeit | Änderungsprotokoll mit Bearbeiter, Feld, alt → neu; Verlauf je Produkt | Bearbeiter wird gewählt, nicht angemeldet |
+| Nummern | IDs aus Zeitstempel + Zufall; Angebotsnummer `AN-Jahr-Kürzel-lfd.` (Kürzel des Bearbeiters), damit zwei Rechner keine gleiche Nummer vergeben | — |
+| WooCommerce | Paketdatei mit neuen/geänderten freigegebenen Produkten; „als eingespielt markieren“ erst nach Bestätigung | kein Veröffentlichen per Klick (API-Schlüssel gehört auf einen Server) |
+| Datenblätter | PDF-Text mit pdf.js, Werte per Mustererkennung, jeder Wert bestätigt; Original bleibt im Browser des prüfenden Rechners | keine KI, keine Texterkennung in Scans/Fotos |
+
+Module der Testversion: Dashboard (Kennzahlen, „Wo ansetzen“, Hersteller, Status, Sicherung, Änderungen), Produkte (Bestand mit Filtern und Sammelbearbeitung, Produkt erfassen mit nächster freier HBR-Nummer, Preise mit Aufschlag-Regel, Hinweise, Referenzen, Import & Export), Kontakte (Kunden, Hersteller, Lieferanten, Partner, Aktivitäten, Preisanfrage per E-Mail, CSV), Anfragen & Angebote (Statusfolge, Mengen aus Fläche + Verschnitt, Stück aus Bedarf je m², Druckansicht/PDF), Einstellungen (Bearbeiter, Firma, Angebot, Sicherung, Stammdaten mit Präfix-Zuordnung), Schnellsuche (Strg + K).
+
+Fachregeln, die die Testversion durchsetzt: Freigabe nur ohne Pflichtlücken; Steindaten gelten für Verblender und Riemchen gemeinsam; Herstellerwechsel zieht beide Produkte mit; Produkte mit Shop-ID werden archiviert statt gelöscht; Preise werden mit Gültigkeitsdatum ergänzt, nicht überschrieben; Angebote sind ab „Gesendet“ gesperrt; Statuswechsel nur entlang der festgelegten Folge (Neu → In Bearbeitung → Angebot erstellt → Gesendet → Angenommen/Abgelehnt → Archiviert).
+
+---
+
 ## 3. Schnittstellen und Synchronisation
 
 ### Synchronisationsmatrix ERP → WooCommerce
@@ -181,7 +203,11 @@ Stand 02.11.2026, lokal geprüft:
 
 | Prüfung | Ergebnis |
 |---|---|
-| 13 automatische Tests (`npm test`) | bestanden |
+| 26 automatische Tests (`npm test`): Schema, Import, Testversion-Logik (Versionskonflikt, Sicherung prüfen, Zusammenführen in beide Richtungen, CSV mit Formelschutz, Produkt-CSV inkl. Fehlern und widersprüchlicher Steinwerte, Kontakt-CSV, Angebotsrechnung, Datenblatt-Erkennung, Shop-Paket, neuer Shop-Stand) | bestanden |
+| Browser-Durchlauf der gebauten `index.html` (Chromium headless, ohne Internet): Bearbeiterwahl, Dashboard, Filter, Produkt bearbeiten + Verlauf, Preis, Produkt erfassen (mit Riemchen), Kontakt, Anfrage → Angebot → Druckansicht, Sicherung als Download, CSV-Export → Änderung → Rückimport, Sicherung einlesen und zusammenführen, Daten nach Neuladen erhalten, zweiter Tab nur lesend, Handybreite ohne seitliches Scrollen | bestanden, keine Fehler in der Konsole |
+| Sicherungsordner (mit Browser-internem Ordner als Ersatz für die Ordnerauswahl): Sicherung schreiben, Stand eines Kollegen erkennen und zusammenführen, automatische Sicherung nach 60 Minuten (nicht nach 30) | bestanden |
+| Datenblatt-PDF (pdf.js 3.11.174 lokal statt cdnjs): alle 8 Werte erkannt, übernommen, als geprüft vermerkt | bestanden |
+| Nicht geprüft | echte Ordnerauswahl und Freigabe nach Browser-Neustart in Chrome/Edge; Betrieb auf GitHub Pages; Laden von pdf.js, Schrift und Produktbildern aus dem Internet; Einspielen des WooCommerce-Pakets |
 | TypeScript-Prüfung | ohne Fehler |
 | Migration auf leerer Datenbank, zweimal | bestanden, zweiter Lauf ohne Wirkung |
 | Erstübernahme echter Bestand (741 Einträge) in PGlite **und** PostgreSQL 16 | identisches Ergebnis |
@@ -193,7 +219,7 @@ Stand 02.11.2026, lokal geprüft:
 
 **Ergebnis der Erstübernahme:** 314 Steine (236 mit Verblender und Riemchen), 289 Verblender, 267 Riemchen, 6 Nistklinker, 179 Referenzen, 1.931 Bilddateien in 3.480 Verwendungen, 2.195 Befunde. Details im Abgleichbericht.
 
-**Bekannte Einschränkungen:** Noch keine Oberfläche, keine Anmeldung, keine Verbindung zum Shop. Die Schema-Tests laufen gegen PGlite; der Import wurde zusätzlich gegen PostgreSQL 16 geprüft.
+**Bekannte Einschränkungen:** Server-Version ohne Oberfläche und Anmeldung; die Testversion hat keine Anmeldung und keine direkte Verbindung zum Shop. Die Schema-Tests laufen gegen PGlite; der Import wurde zusätzlich gegen PostgreSQL 16 geprüft.
 
 ---
 

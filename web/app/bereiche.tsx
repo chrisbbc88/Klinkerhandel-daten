@@ -1,0 +1,201 @@
+// Produktbereiche: Preispflege, Hinweise, Referenzen.
+import { useMemo, useState } from "preact/hooks";
+import { z, aendern, frage, melde } from "./store.ts";
+import { ab, herstellerName } from "./abgeleitet.ts";
+import { Seitenkopf, Karte, Auswahl, Zahl, Seiten, useSortierung, geheZu, datum, Feld } from "./ui.tsx";
+import { ART, aktuellerPreis, heute, type Produkt, type Preis, type Hinweis } from "../lib/modell.ts";
+import { aendere, neueId } from "../lib/aendern.ts";
+import { bildUrl } from "../lib/woo.ts";
+import { euro } from "../lib/angebot.ts";
+
+// ---------- Preise ----------
+export function PreisPflege() {
+  const d = z.daten, a = ab();
+  const [q, setQ] = useState(""); const [herst, setHerst] = useState(""); const [art, setArt] = useState(""); const [nurOhne, setNurOhne] = useState(false);
+  const [neu, setNeu] = useState<Record<number, { vk?: number | null; ek?: number | null }>>({});
+  const [abDatum, setAbDatum] = useState(heute());
+  const [regel, setRegel] = useState<"aufschlag" | "erhoehen">("aufschlag");
+  const [prozent, setProzent] = useState<number | null>(null);
+  const [seite, setSeite] = useState(0);
+
+  const liste = useMemo(() => d.produkte.filter((p) => {
+    if (p.status === "archiviert" || p.art === "nistklinker") return false;
+    const s = p.stein_id ? a.steine.get(p.stein_id) : undefined;
+    if (herst && String(s?.hersteller_id) !== herst) return false;
+    if (art && p.art !== art) return false;
+    if (nurOhne && aktuellerPreis(p, "vk")) return false;
+    if (q && !`${p.sku} ${p.name}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  }), [z.rev, q, herst, art, nurOhne]);
+  const { sortiert, Kopf } = useSortierung<Produkt>(liste, "sku", {
+    sku: (p) => p.sku ?? "", ek: (p) => aktuellerPreis(p, "ek")?.betrag ?? null, vk: (p) => aktuellerPreis(p, "vk")?.betrag ?? null,
+    auf: (p) => { const e = aktuellerPreis(p, "ek"), v = aktuellerPreis(p, "vk"); return e && v ? v.betrag / e.betrag : null; },
+  });
+  const offen = Object.entries(neu).filter(([, v]) => v.vk || v.ek);
+
+  function vorschlagRegel() {
+    if (prozent == null) return;
+    const n: typeof neu = { ...neu };
+    let k = 0;
+    for (const p of liste) {
+      const e = aktuellerPreis(p, "ek")?.betrag, v = aktuellerPreis(p, "vk")?.betrag;
+      const basis = regel === "aufschlag" ? e : v;
+      if (!basis) continue;
+      n[p.id] = { ...n[p.id], vk: Math.round(basis * (1 + prozent / 100) * 100) / 100 }; k++;
+    }
+    setNeu(n);
+    melde(`${k} neue VK-Preise vorgeschlagen. Bitte prüfen und dann speichern.`, "info");
+  }
+
+  async function speichern() {
+    if (offen.length > 50 && !(await frage(`${offen.length} Produkte erhalten neue Preise ab ${datum(abDatum)}.`, "Preise speichern", "Speichern"))) return;
+    aendern((dd, von) => {
+      const jetzt = new Date().toISOString();
+      for (const [id, v] of offen) {
+        const p = dd.produkte.find((x) => x.id === Number(id))!;
+        const add: Preis[] = [];
+        if (v.vk) add.push({ id: neueId(), preisart: "vk", betrag: v.vk, einheit: "m2", gueltig_ab: abDatum, quelle: "manuell", erfasst_von: von, erfasst_am: jetzt });
+        if (v.ek) add.push({ id: neueId(), preisart: "ek", betrag: v.ek, einheit: "m2", gueltig_ab: abDatum, quelle: "lieferant", erfasst_von: von, erfasst_am: jetzt });
+        aendere(dd, "produkte", p.id, { preise: [...p.preise, ...add] }, von);
+      }
+    }, `${offen.length} Preise gespeichert.`);
+    setNeu({});
+  }
+
+  const sichtbar = sortiert.slice(seite * 50, seite * 50 + 50);
+  return <>
+    <Seitenkopf titel="Preise" text="Einkaufs- und Verkaufspreise je m² pflegen. Neue Preise werden mit Gültigkeitsdatum ergänzt, alte bleiben im Verlauf.">
+      <span class="muted">gültig ab</span><input type="date" style={{ width: 150 }} value={abDatum} onInput={(e) => setAbDatum((e.target as HTMLInputElement).value)} />
+      <button class="btn primaer" disabled={!offen.length || z.nurLesen} onClick={speichern}>{offen.length} Preise speichern</button>
+    </Seitenkopf>
+    <Karte ohnePadding>
+      <div class="filterleiste">
+        <input type="search" placeholder="Suche" value={q} onInput={(e) => { setQ((e.target as HTMLInputElement).value); setSeite(0); }} />
+        <Auswahl wert={herst} setze={(v) => { setHerst(v); setSeite(0); }} optionen={d.hersteller.map((h) => [String(h.id), h.name] as [string, string])} leer="Alle Hersteller" />
+        <Auswahl wert={art} setze={(v) => { setArt(v); setSeite(0); }} optionen={[["verblender", "Verblender"], ["riemchen", "Riemchen"], ["daemmklinker", "Dämmklinker"]]} leer="Alle Arten" />
+        <label class="check"><input type="checkbox" checked={nurOhne} onChange={(e) => { setNurOhne((e.target as HTMLInputElement).checked); setSeite(0); }} /> nur ohne VK</label>
+        <span style={{ marginLeft: "auto" }} class="knopfreihe">
+          <Auswahl wert={regel} setze={setRegel} optionen={[["aufschlag", "VK = EK + Aufschlag"], ["erhoehen", "VK erhöhen um"]]} />
+          <span style={{ width: 70 }}><Zahl wert={prozent} setze={setProzent} aria-label="Prozent" /></span>%
+          <button class="btn klein" disabled={prozent == null} onClick={vorschlagRegel}>Für {liste.length} vorschlagen</button>
+        </span>
+      </div>
+      <div class="tabelle-wrap">
+        <table class="t">
+          <thead><tr><Kopf feld="sku">Artikelnummer</Kopf><th>Art</th><th>Hersteller</th><Kopf feld="ek" klasse="num">EK/m²</Kopf><th style={{ width: 110 }}>neuer EK</th><Kopf feld="vk" klasse="num">VK/m²</Kopf><th style={{ width: 110 }}>neuer VK</th><Kopf feld="auf" klasse="num">Aufschlag</Kopf></tr></thead>
+          <tbody>{sichtbar.map((p) => {
+            const e = aktuellerPreis(p, "ek"), v = aktuellerPreis(p, "vk"), n = neu[p.id] ?? {};
+            const ee = n.ek ?? e?.betrag, vv = n.vk ?? v?.betrag;
+            return <tr>
+              <td><a class="mono" href={`#/produkte/${p.id}/preise`}>{p.sku ?? p.name.slice(0, 30)}</a></td>
+              <td>{ART[p.art]}</td><td>{herstellerName(a.steine.get(p.stein_id ?? -1)?.hersteller_id)}</td>
+              <td class="num">{e ? euro(e.betrag) : "–"}</td>
+              <td><Zahl wert={n.ek ?? null} setze={(x) => setNeu({ ...neu, [p.id]: { ...n, ek: x } })} aria-label={`Neuer EK ${p.sku}`} /></td>
+              <td class="num">{v ? euro(v.betrag) : "–"}</td>
+              <td><Zahl wert={n.vk ?? null} setze={(x) => setNeu({ ...neu, [p.id]: { ...n, vk: x } })} aria-label={`Neuer VK ${p.sku}`} /></td>
+              <td class="num">{ee && vv ? `${((vv / ee - 1) * 100).toFixed(0)} %` : "–"}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      <Seiten seite={seite} setSeite={setSeite} gesamt={sortiert.length} proSeite={50} />
+    </Karte>
+  </>;
+}
+
+// ---------- Hinweise ----------
+const REGEL_TITEL: Record<string, string> = {
+  kategorie_falsch: "Riemchen in Kategorie Verblender", code_doppelt: "HBR-Code doppelt im Shop", keine_kategorie: "Ohne Kategorie", herstellungsart_mehrere: "Mehrere Herstellungsarten",
+  code_schreibweise: "HBR-Code falsch geschrieben", kurztext_farbe: "Kurztext widerspricht Farbe", kurztext_format: "Kurztext widerspricht Format", bild_doppelt: "Bild mehrfach im selben Produkt",
+  referenz_ohne_text: "Referenz ohne Objekttext", referenz_link_alt: "Referenz verlinkt auf alte Adresse", referenz_ohne_stein: "Referenz ohne Stein", farben_verblender_riemchen: "Farben Verblender/Riemchen verschieden",
+  kein_gegenstueck: "Kein Gegenstück Verblender/Riemchen", referenz_ohne_link: "Referenz ohne Produktlink", referenz_ohne_rubrik: "Referenz ohne Rubrik",
+};
+export function HinweisListe() {
+  const d = z.daten, a = ab();
+  const [status, setStatus] = useState<"offen" | "erledigt" | "ignoriert">("offen");
+  const [regel, setRegel] = useState("");
+  const nachWoo = new Map(d.produkte.filter((p) => p.woo_id).map((p) => [p.woo_id!, p]));
+  const nachCode = new Map(d.steine.map((s) => [s.hbr_code, s]));
+  const liste = d.hinweise.filter((h) => h.status === status && (!regel || h.regel === regel));
+  const gruppen = new Map<string, number>();
+  for (const h of d.hinweise) if (h.status === status) gruppen.set(h.regel, (gruppen.get(h.regel) ?? 0) + 1);
+  const ziel = (h: Hinweis) => {
+    const p = h.woo_id ? nachWoo.get(h.woo_id) : undefined;
+    if (p) return `produkte/${p.id}/hinweise`;
+    const s = h.hbr_code ? nachCode.get(h.hbr_code) : undefined;
+    const g = s ? a.geschwister.get(s.id)?.[0] : undefined;
+    if (g) return `produkte/${g.id}/hinweise`;
+    if (h.objekt === "referenz") return "produkte/referenzen";
+    return null;
+  };
+  const setze = (ids: number[], st: Hinweis["status"]) => aendern((dd, von) => {
+    const jetzt = new Date().toISOString();
+    for (const id of ids) { const h = dd.hinweise.find((x) => x.id === id)!; h.status = st; h.erledigt_von = st === "offen" ? null : von; h.erledigt_am = st === "offen" ? null : jetzt; }
+    dd.aenderungen.push({ zeit: jetzt, von, tabelle: "hinweise", id: ids.length === 1 ? ids[0] : 0, aktion: "aendern", felder: null, text: `${ids.length} Hinweise: ${st}` });
+  });
+  return <>
+    <Seitenkopf titel="Hinweise aus dem Shop-Abgleich" text="Befunde, die sich nicht automatisch aus den Daten prüfen lassen. Laufende Lücken (Hersteller, Bilder, Texte …) stehen direkt am Produkt und im Dashboard." />
+    <div class="raster" style={{ gridTemplateColumns: "260px 1fr" }}>
+      <Karte ohnePadding>
+        <div class="filterleiste"><Auswahl wert={status} setze={(v) => { setStatus(v); setRegel(""); }} optionen={[["offen", "Offen"], ["erledigt", "Erledigt"], ["ignoriert", "Ignoriert"]]} /></div>
+        <div style={{ padding: 6 }}>
+          <div class={`leiste klickbar`} style={{ gridTemplateColumns: "1fr 40px", padding: "6px 8px", fontWeight: regel ? 400 : 600 }} onClick={() => setRegel("")}><span>Alle</span><span class="num">{[...gruppen.values()].reduce((x, y) => x + y, 0)}</span></div>
+          {[...gruppen].sort((x, y) => y[1] - x[1]).map(([r, n]) => <div class="leiste klickbar" style={{ gridTemplateColumns: "1fr 40px", padding: "6px 8px", fontWeight: regel === r ? 600 : 400 }} onClick={() => setRegel(r)}><span>{REGEL_TITEL[r] ?? r}</span><span class="num">{n}</span></div>)}
+        </div>
+      </Karte>
+      <Karte ohnePadding titel={`${liste.length} Hinweise`} rechts={status === "offen" && regel && liste.length > 0 ? <button class="btn klein" onClick={async () => { if (await frage(`Alle ${liste.length} Hinweise „${REGEL_TITEL[regel] ?? regel}“ als ignoriert markieren?`, "Ignorieren", "Ignorieren")) setze(liste.map((h) => h.id), "ignoriert"); }}>Alle ignorieren</button> : undefined}>
+        <div class="tabelle-wrap" style={{ maxHeight: "70vh" }}>
+          <table class="t"><tbody>
+            {liste.slice(0, 300).map((h) => { const zl = ziel(h); return <tr>
+              <td><span class={`marke ${h.schwere === "pflicht" ? "bad" : h.schwere === "info" ? "info" : "warn"}`}>{h.schwere}</span></td>
+              <td class="mono nowrap">{h.hbr_code ?? "–"}</td>
+              <td>{h.text}</td>
+              <td class="nowrap">{zl && <button class="btn klein" onClick={() => geheZu(zl)}>Öffnen</button>} {status === "offen" ? <><button class="btn klein" onClick={() => setze([h.id], "erledigt")}>Erledigt</button> <button class="btn klein" onClick={() => setze([h.id], "ignoriert")}>Ignorieren</button></> : <button class="btn klein link" onClick={() => setze([h.id], "offen")}>wieder öffnen</button>}</td>
+            </tr>; })}
+            {liste.length > 300 && <tr><td colSpan={4} class="muted">… {liste.length - 300} weitere – bitte links eine Gruppe wählen.</td></tr>}
+            {!liste.length && <tr><td class="leer">Keine Hinweise.</td></tr>}
+          </tbody></table>
+        </div>
+      </Karte>
+    </div>
+  </>;
+}
+
+// ---------- Referenzen ----------
+export function Referenzen() {
+  const d = z.daten, a = ab();
+  const [q, setQ] = useState(""); const [nurOhne, setNurOhne] = useState(false); const [seite, setSeite] = useState(0);
+  const liste = d.referenzen.filter((r) => (!nurOhne || !r.stein_id) && (!q || `${r.name} ${r.hbr_code_shop ?? ""} ${r.objektart ?? ""}`.toLowerCase().includes(q.toLowerCase())));
+  const steinSetzen = (id: number, code: string) => {
+    const s = d.steine.find((x) => x.hbr_code === code.trim().toUpperCase());
+    if (code.trim() && !s) { melde(`Stein ${code} nicht gefunden.`, "fehler"); return; }
+    aendern((dd, von) => aendere(dd, "referenzen", id, { stein_id: s?.id ?? null }, von), s ? `Mit ${s.hbr_code} verknüpft.` : "Verknüpfung entfernt.");
+  };
+  return <>
+    <Seitenkopf titel="Referenzen" text={`${d.referenzen.length} Objektfotos aus dem Shop. Verknüpft mit dem verbauten Stein, erscheinen sie später am Produkt.`} />
+    <Karte ohnePadding>
+      <div class="filterleiste">
+        <input type="search" placeholder="Suche" value={q} onInput={(e) => { setQ((e.target as HTMLInputElement).value); setSeite(0); }} />
+        <label class="check"><input type="checkbox" checked={nurOhne} onChange={(e) => { setNurOhne((e.target as HTMLInputElement).checked); setSeite(0); }} /> nur ohne Stein ({d.referenzen.filter((r) => !r.stein_id).length})</label>
+      </div>
+      <table class="t">
+        <thead><tr><th></th><th>Name</th><th>Rubrik</th><th>Stein</th><th>Bilder</th></tr></thead>
+        <tbody>{liste.slice(seite * 50, seite * 50 + 50).map((r) => { const b = r.bilder[0] ? a.bilder.get(r.bilder[0]) : undefined; const s = r.stein_id ? a.steine.get(r.stein_id) : undefined; return <tr>
+          <td>{b ? <img class="bild" src={bildUrl(b.datei)} alt="" loading="lazy" /> : <span class="bild" />}</td>
+          <td>{r.name}</td>
+          <td class="klein muted">{r.rubriken.join(", ") || r.objektart || "–"}</td>
+          <td><SteinFeld wert={s?.hbr_code ?? ""} setze={(c) => steinSetzen(r.id, c)} /></td>
+          <td class="num">{r.bilder.length}</td>
+        </tr>; })}</tbody>
+      </table>
+      <Seiten seite={seite} setSeite={setSeite} gesamt={liste.length} proSeite={50} />
+    </Karte>
+  </>;
+}
+function SteinFeld({ wert, setze }: { wert: string; setze: (v: string) => void }) {
+  const [t, setT] = useState(wert);
+  return <Feld label=""><input type="text" class="mono" style={{ width: 130 }} list="stein-codes" value={t} placeholder="HBR 12-345" onInput={(e) => setT((e.target as HTMLInputElement).value)} onBlur={() => { if (t !== wert) setze(t); }} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} /></Feld>;
+}
+export function SteinCodes() {
+  return <datalist id="stein-codes">{z.daten.steine.map((s) => <option value={s.hbr_code} />)}</datalist>;
+}
