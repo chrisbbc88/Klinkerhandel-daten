@@ -135,7 +135,7 @@ export function HinweisListe() {
   });
   return <>
     <Seitenkopf titel="Hinweise aus dem Shop-Abgleich" text="Befunde, die sich nicht automatisch aus den Daten prüfen lassen. Laufende Lücken (Hersteller, Bilder, Texte …) stehen direkt am Produkt und im Dashboard." />
-    <div class="raster" style={{ gridTemplateColumns: "260px 1fr" }}>
+    <div class="raster r-nav">
       <Karte ohnePadding>
         <div class="filterleiste"><Auswahl wert={status} setze={(v) => { setStatus(v); setRegel(""); }} optionen={[["offen", "Offen"], ["erledigt", "Erledigt"], ["ignoriert", "Ignoriert"]]} /></div>
         <div style={{ padding: 6 }}>

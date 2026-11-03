@@ -93,7 +93,7 @@ export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText }: {
       {schluessel ? "Die KI liest Hersteller, Herstellungsart, Farben, Formate, Maße, Technik und einen Textvorschlag aus. Jeder Wert wird erst nach Ihrer Bestätigung übernommen."
         : <>Ohne KI werden aus PDFs mit Text nur Maße und technische Werte gesucht. Für das vollständige Auslesen unter <a href="#/einstellungen/allgemein">Einstellungen › Allgemein</a> einen Claude-API-Schlüssel hinterlegen.</>}
     </div>}
-    {datei && <div class="raster" style={{ gridTemplateColumns: ergebnis ? "minmax(0,1fr) minmax(0,1.3fr)" : "1fr" }}>
+    {datei && <div class={`raster ${ergebnis ? "r-ki" : ""}`}>
       <div>
         {istPdf ? <iframe src={datei.url} title="Datenblatt" style={{ width: "100%", height: ergebnis ? 520 : 360, border: "1px solid var(--line)", borderRadius: 6 }} />
           : <img src={datei.url} alt="Datenblatt" style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 6 }} />}

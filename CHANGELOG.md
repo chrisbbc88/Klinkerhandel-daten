@@ -3,6 +3,11 @@
 Die Versionsnummer steht unten rechts auf jeder Seite der Testversion (Klick öffnet Einstellungen › Über das ERP).
 Jede ausgelieferte `index.html` erhält eine neue Nummer (`package.json` → `version`, dann `npm run build:web`).
 
+## v0.5.1 – 02.11.2026
+- Platzhalter-Liste der E-Mail-Vorlagen bricht sauber um und bleibt in der Karte; Vorlagen-Seite ordnet sich bei schmalen Fenstern neu an.
+- Mobilansicht überarbeitet (alle Seiten bei 390 px geprüft): keine Seite läuft mehr seitlich aus dem Bildschirm; Reiter brechen um; Pipeline-Spalten untereinander; Tabellen scrollen innerhalb ihrer Karte; im Bestand und in der Kontaktliste nur die wichtigsten Spalten; Positionen im Angebot seitlich scrollbar mit lesbarer Artikelspalte; Vorlagenauswahl im E-Mail-Dialog als Auswahlliste; Angebotsdruck auf dem Handy lesbar; Versionsanzeige und Meldungen platzsparend.
+- Feste Spaltenaufteilungen durch flexible ersetzt (auch für Tablets).
+
 ## v0.5.0 – 02.11.2026
 - E-Mail-Vorlagen je Situation (Eingangsbestätigung, Rückfrage fehlende Angaben, Angebot, Nachfassen, Auftragsbestätigung, Liefertermin, Bestellung beim Lieferanten, Rückfrage nach Absage) mit Platzhaltern; im Vorgang „E-Mail schreiben“: passende Vorlage vorausgewählt, Text änderbar, kopieren oder im Mailprogramm öffnen, Vermerk beim Kontakt. Vorlagen unter Einstellungen bearbeiten.
 - Preisstaffel (Rabatt je Position nach m²) und Mindermengenzuschlag, automatisch angewendet; Handrabatt und Handzuschlag haben Vorrang.

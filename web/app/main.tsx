@@ -189,7 +189,7 @@ function App() {
       <button class="btn" onClick={() => z.frage!.antwort(false)}>Abbrechen</button>
       <button class={`btn ${z.frage.gefahr ? "gefahr" : "primaer"}`} onClick={() => z.frage!.antwort(true)} autoFocus>{z.frage.ok}</button>
     </>}><p style={{ margin: 0 }}>{z.frage.text}</p></Dialog>}
-    <a class="versionsmarke" href="#/einstellungen/info" title="Programmversion und Erstellungszeitpunkt">{VERSION}</a>
+    <a class="versionsmarke" href="#/einstellungen/info" title={`Programmversion ${VERSION}`}>{VERSION.split(" · ")[0]}<span class="v-datum"> · {VERSION.split(" · ")[1] ?? ""}</span></a>
     <div class="meldungen" role="status" aria-live="polite">{z.meldungen.map((m) => <div class={`meldung ${m.art}`}>{m.text}</div>)}</div>
     {menue && <div class="schleier" style={{ zIndex: 35 }} onClick={() => setMenue(false)} />}
   </div>;

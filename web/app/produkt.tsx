@@ -227,7 +227,7 @@ function Preise({ p }: { p: Produkt }) {
   const h = heute();
   return <div class="raster r-2-1">
     <Karte titel="Preisverlauf" ohnePadding>
-      <table class="t">
+      <div class="tabelle-wrap"><table class="t">
         <thead><tr><th>Art</th><th>Einheit</th><th class="num">Betrag netto</th><th>gültig ab</th><th>Quelle</th><th>erfasst</th><th></th></tr></thead>
         <tbody>
           {[...p.preise].sort((x, y) => y.gueltig_ab.localeCompare(x.gueltig_ab) || y.erfasst_am.localeCompare(x.erfasst_am)).map((x) => {
@@ -244,11 +244,11 @@ function Preise({ p }: { p: Produkt }) {
           })}
           {!p.preise.length && <tr><td colSpan={7} class="leer">Noch keine Preise erfasst.</td></tr>}
         </tbody>
-      </table>
+      </table></div>
     </Karte>
     <div class="raster" style={{ alignContent: "start" }}>
       <Karte titel="Neuer Preis">
-        <div class="formular" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div class="formular zwei">
           <Feld label="Preisart"><Auswahl wert={art} setze={setArt} optionen={[["vk", "Verkauf (VK)"], ["ek", "Einkauf (EK)"]]} /></Feld>
           <Feld label="Einheit"><Auswahl wert={einheit} setze={setEinheit} optionen={[["m2", "je m²"], ["stk", "je Stück"], ["pal", "je Palette"]]} /></Feld>
           <Feld label="Betrag netto €"><Zahl wert={betrag} setze={setBetrag} /></Feld>

@@ -79,7 +79,7 @@ export function Bestand() {
       </div>
       {auswahl.size > 0 && <Sammel auswahl={auswahl} setAuswahl={setAuswahl} gefiltert={sortiert} />}
       <div class="tabelle-wrap">
-        <table class="t">
+        <table class="t bestand">
           <thead><tr>
             <th style={{ width: 32 }}><input type="checkbox" aria-label="Alle auf dieser Seite wählen" checked={alleSichtbarGewaehlt} onChange={() => { const n = new Set(auswahl); sichtbar.forEach((p) => (alleSichtbarGewaehlt ? n.delete(p.id) : n.add(p.id))); setAuswahl(n); }} /></th>
             <th style={{ width: 52 }}></th>

@@ -82,7 +82,7 @@ export function VorgangListe() {
     </div>
     {kz.nachfassen.length > 0 && <div class="hinweisbox warn" style={{ marginBottom: 12 }}><Icon n="warnung" /><span><b>{kz.nachfassen.length} Angebote nachfassen</b> – seit über 7 Tagen versendet ohne Rückmeldung: {kz.nachfassen.slice(0, 5).map((v) => v.nummer).join(", ")}</span></div>}
     {ansicht === "pipeline" ? <>
-      <div class="filterleiste karte" style={{ marginBottom: 12, borderRadius: 6 }}><input type="search" placeholder="Suche: Nummer, Name, Firma, Ort…" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} /><span class="muted klein">Karten per Ziehen in die nächste Spalte verschieben – erlaubte Schritte sind hervorgehoben.</span></div>
+      <div class="filterleiste karte" style={{ marginBottom: 12, borderRadius: 6 }}><input type="search" placeholder="Suche: Nummer, Name, Firma, Ort…" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} /><span class="muted klein nur-breit">Karten per Ziehen in die nächste Spalte verschieben – erlaubte Schritte sind hervorgehoben.</span></div>
       <div class="pipeline">
         {SPALTEN.map((s) => {
           const liste = d.vorgaenge.filter((v) => v.status === s && passt(v)).sort((x, y) => y.geaendert_am.localeCompare(x.geaendert_am));
@@ -112,7 +112,7 @@ export function VorgangListe() {
                 </div>
               </article>;
             })}
-            {!liste.length && <p class="faint klein" style={{ padding: "6px 4px" }}>leer</p>}
+            {!liste.length && <p class="faint klein leer-spalte" style={{ padding: "6px 4px" }}>leer</p>}
           </section>;
         })}
       </div>
@@ -189,7 +189,7 @@ function MailAnfrage({ onClose }: { onClose: () => void }) {
       : <button class="btn primaer" onClick={anlegen}><Icon n="check" />Angebotsentwurf anlegen</button>}
   </>}>
     {!erg && <>
-      <div class="formular" style={{ gridTemplateColumns: "1fr 220px" }}>
+      <div class="formular r-zwei-schmal">
         <Feld label="E-Mail-Text einfügen (Strg + V) oder Datei laden"><textarea rows={12} value={text} onInput={(e) => setText((e.target as HTMLTextAreaElement).value)} placeholder="Kompletten Text der Anfrage hier einfügen – inklusive Absender, Adresse, Artikel und Flächen." /></Feld>
         <div class="raster" style={{ alignContent: "start" }}>
           <Feld label="Eingang über"><Auswahl wert={quelle} setze={setQuelle} optionen={QUELLE} /></Feld>
@@ -403,7 +403,7 @@ function VDetail({ v }: { v: Vorgang }) {
     {fremd && <div class="hinweisbox warn" style={{ marginBottom: 12 }}><span>Der Vorgang wurde inzwischen anderweitig geändert. Speichern ist gesperrt.</span><div class="knopfreihe"><button class="btn klein" onClick={neuLaden}>Neu laden</button></div></div>}
     {!offenBearb && v.status !== "archiviert" && v.status !== "angenommen" && <div class="hinweisbox" style={{ marginBottom: 12 }}>Das Angebot ist {VORGANG_STATUS[v.status].toLowerCase()} und deshalb gesperrt. Für Änderungen „In Bearbeitung“ wählen.</div>}
     {v.status === "abgelehnt" && v.verlustgrund && <div class="hinweisbox bad" style={{ marginBottom: 12 }}>Verloren: {v.verlustgrund}</div>}
-    <div class="raster" style={{ gridTemplateColumns: "minmax(0,1fr) 320px" }}>
+    <div class="raster r-seite">
       <div class="raster" style={{ alignContent: "start" }}>
         {v.status === "angenommen" && <Karte titel="Gewonnen – nächste Schritte" rechts={<span class="marke ok">{v.aufgaben.filter((x) => x.erledigt_am).length}/{v.aufgaben.length} erledigt</span>}>
           <ul class="pruefliste">{v.aufgaben.map((x) => <li style={{ gridTemplateColumns: "24px 1fr auto" }}>
@@ -414,7 +414,7 @@ function VDetail({ v }: { v: Vorgang }) {
         </Karte>}
         <Karte titel="Positionen" ohnePadding>
           <div class="tabelle-wrap">
-            <table class="t">
+            <table class="t pos">
               <thead><tr><th>Artikel</th><th style={{ width: 90 }}>Fläche m²</th><th style={{ width: 75 }}>Verschn. %</th><th class="num">Menge m²</th><th class="num">Stück</th><th style={{ width: 100 }}>EP €/m²</th><th style={{ width: 70 }}>Rabatt %</th><th class="num">Gesamt</th><th></th></tr></thead>
               <tbody>
                 {e.positionen.map((p, i) => <tr>
@@ -532,8 +532,9 @@ function MailDialog({ v, onClose }: { v: Vorgang; onClose: () => void }) {
     <a class="btn primaer" href={mailto} onClick={() => { vermerken("im Mailprogramm geöffnet"); onClose(); }}><Icon n="mail" />Im Mailprogramm öffnen</a>
     <button class="btn" disabled title="kommt mit der Server-Version">Direkt senden</button>
   </>}>
-    <div class="raster" style={{ gridTemplateColumns: "220px 1fr" }}>
-      <div class="raster" style={{ alignContent: "start", gap: 4 }}>
+    <div class="raster r-nav">
+      <Feld label="Vorlage" klasse="nur-mobil"><select value={id} onChange={(x) => waehle((x.target as HTMLSelectElement).value)}>{[...new Set(vorlagen.map((x) => x.situation))].map((sit) => <optgroup label={sit}>{vorlagen.filter((x) => x.situation === sit).map((x) => <option value={x.id}>{x.titel}</option>)}</optgroup>)}</select></Feld>
+      <div class="raster nur-breit" style={{ alignContent: "start", gap: 4 }}>
         {[...new Set(vorlagen.map((x) => x.situation))].map((sit) => <div>
           <div class="faint klein" style={{ margin: "6px 0 2px" }}>{sit}</div>
           {vorlagen.filter((x) => x.situation === sit).map((x) => <button class={`chip ${x.id === id ? "an" : ""}`} style={{ width: "100%", borderRadius: 6, marginBottom: 4, justifyContent: "flex-start" }} onClick={() => waehle(x.id)}>{x.titel}</button>)}
@@ -541,7 +542,7 @@ function MailDialog({ v, onClose }: { v: Vorgang; onClose: () => void }) {
         <a class="klein" href="#/einstellungen/vorlagen" onClick={onClose}>Vorlagen bearbeiten</a>
       </div>
       <div class="raster" style={{ alignContent: "start" }}>
-        <div class="formular" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div class="formular zwei">
           <Feld label="An">{id === "bestellung_lieferant" && lieferanten.length ? <Auswahl wert={an} setze={setAn} optionen={lieferanten.map((x) => [x.email, `${kontaktAnzeige(x)} <${x.email}>`] as [string, string])} /> : <input type="email" value={an} onInput={(x) => setAn((x.target as HTMLInputElement).value)} />}</Feld>
           <Feld label="Betreff"><div class="knopfreihe" style={{ flexWrap: "nowrap" }}><Text wert={betreff} setze={setBetreff} /><button class="btn klein" onClick={() => navigator.clipboard?.writeText(betreff).then(() => melde("Betreff kopiert."))} title="Betreff kopieren">⧉</button></div></Feld>
         </div>

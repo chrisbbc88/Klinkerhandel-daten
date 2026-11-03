@@ -47,7 +47,7 @@ export function KontaktListe({ typ }: { typ: KontaktTyp | "" }) {
         <div class="chips">{(["", "kunde", "hersteller", "lieferant", "partner"] as const).map((t) => <a class={`chip ${typ === t ? "an" : ""}`} href={`#/kontakte${t ? "/" + t : ""}`} style={{ textDecoration: "none" }}>{TYP_PLURAL[t]} <span class="faint">{t ? d.kontakte.filter((k) => k.typ === t).length : d.kontakte.length}</span></a>)}</div>
       </div>
       <div class="tabelle-wrap">
-        <table class="t">
+        <table class="t kontaktliste">
           <thead><tr><Kopf feld="name">Name</Kopf><th>{typ === "kunde" || typ === "partner" ? "Firma" : typ ? "Ansprechpartner" : "Firma / Ansprechpartner"}</th><th>Daten</th><Kopf feld="typ">Typ</Kopf><Kopf feld="ort">Ort</Kopf><th>Telefon</th><th>E-Mail</th><th class="num">Vorgänge</th><Kopf feld="geaendert">Geändert</Kopf></tr></thead>
           <tbody>{sortiert.slice(seite * 50, seite * 50 + 50).map((k) => <tr class="klickbar" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) return; geheZu(`kontakte/k/${k.id}`); }}>
             <td><b style={{ fontWeight: 500 }}>{kontaktName(k)}</b></td>

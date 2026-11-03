@@ -304,7 +304,7 @@ function Vorlagen() {
     aendern((dd) => { dd.einstellungen.vorlagen = [...(dd.einstellungen.vorlagen ?? []), v]; });
     setId(v.id); setE(v);
   }
-  return <div class="raster" style={{ gridTemplateColumns: "240px minmax(0,1fr) 260px" }}>
+  return <div class="raster r-vorlagen">
     <Karte ohnePadding titel="Vorlagen" rechts={<button class="btn klein" onClick={neu} disabled={z.nurLesen}>Neu</button>}>
       <div style={{ padding: 8, display: "grid", gap: 4 }}>{[...new Set(liste.map((x) => x.situation))].map((sit) => <div>
         <div class="faint klein" style={{ margin: "6px 4px 2px" }}>{sit}</div>
@@ -312,7 +312,7 @@ function Vorlagen() {
       </div>)}</div>
     </Karte>
     <Karte titel={e.titel} rechts={angepasst && istStandard ? <span class="marke info">angepasst</span> : undefined}>
-      <div class="formular" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <div class="formular zwei">
         <Feld label="Name"><Text wert={e.titel} setze={(v) => setE({ ...e, titel: v })} /></Feld>
         <Feld label="Situation"><Text wert={e.situation} setze={(v) => setE({ ...e, situation: v })} /></Feld>
         <Feld label="Betreff" klasse="breit"><Text wert={e.betreff} setze={(v) => setE({ ...e, betreff: v })} /></Feld>
@@ -326,7 +326,7 @@ function Vorlagen() {
     </Karte>
     <Karte titel="Platzhalter">
       <p class="muted klein" style={{ marginTop: 0 }}>Werden beim Schreiben aus dem Vorgang gefüllt. Text in [eckigen Klammern] füllen Sie selbst.</p>
-      <dl class="dl klein" style={{ gridTemplateColumns: "auto 1fr" }}>{PLATZHALTER.map(([k, t]) => <><dt class="mono">{k}</dt><dd>{t}</dd></>)}</dl>
+      <ul class="platzhalter">{PLATZHALTER.map(([k, t]) => <li><code>{k}</code><span>{t}</span></li>)}</ul>
     </Karte>
   </div>;
 }

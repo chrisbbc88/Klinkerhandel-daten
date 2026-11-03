@@ -226,6 +226,23 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}
 .pkarte:hover{border-color:var(--line-strong);box-shadow:0 3px 10px rgba(0,0,0,.07)}
 .pkarte .name{font-weight:500;margin-top:2px;line-height:1.35}
 .pkarte[draggable=true]{cursor:grab}
+.raster>*,.formular>*{min-width:0}
+.r-seite{grid-template-columns:minmax(0,1fr) 320px}
+.r-nav{grid-template-columns:240px minmax(0,1fr)}
+.r-vorlagen{grid-template-columns:230px minmax(0,1fr) 270px}
+.r-ki{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)}
+.formular.zwei{grid-template-columns:1fr 1fr}
+.r-zwei-schmal{grid-template-columns:minmax(0,1fr) 220px}
+ .t.pos{min-width:780px}
+.t.pos td:first-child{min-width:190px}
+.karte-kopf{flex-wrap:wrap}
+.nur-mobil{display:none!important}
+.platzhalter{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:12px}
+.platzhalter li{display:grid;gap:1px}
+.platzhalter code{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 5px;justify-self:start;max-width:100%;overflow-wrap:anywhere}
+.platzhalter span{color:var(--muted);overflow-wrap:anywhere}
+@media (max-width:1250px){.r-vorlagen{grid-template-columns:220px minmax(0,1fr)}.r-vorlagen>:last-child{grid-column:1/-1}.r-vorlagen .platzhalter{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}}
+@media (max-width:1100px){.r-seite,.r-ki{grid-template-columns:1fr}}
 @media (max-width:1100px){.r4{grid-template-columns:repeat(2,minmax(0,1fr))}.r-2-1{grid-template-columns:1fr}}
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -235,9 +252,38 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}
   .suche-knopf{min-width:0}.suche-knopf kbd{display:none}
   .inhalt{padding:16px}
   .banner{margin:12px 16px 0}
-  .r2,.r3{grid-template-columns:1fr}
+  .r2,.r3,.r-nav,.r-vorlagen,.r-zwei-schmal{grid-template-columns:1fr}
+  .r-vorlagen .platzhalter{grid-template-columns:1fr}
+  .karte>table.t,.karte-inhalt>table.t,.dialog-inhalt table.t{display:block;overflow-x:auto}
+  .reiter{flex-wrap:wrap;overflow:visible}
+  .reiter button{padding:6px 10px}
+  .pipeline{grid-template-columns:1fr;overflow:visible}
+  .spalte{min-height:0}
+  .t.bestand :is(th,td):is(:nth-child(2),:nth-child(6),:nth-child(7),:nth-child(8),:nth-child(9),:nth-child(12)){display:none}
+  .t.kontaktliste :is(th,td):is(:nth-child(4),:nth-child(7),:nth-child(8),:nth-child(9)){display:none}
+  .t td.nowrap{white-space:normal}
+  .versionsmarke .v-datum{display:none}
+  .nur-breit{display:none!important}
+  .nur-mobil{display:grid!important}
+  .leer-spalte{display:none}
+  .spalte{padding:6px 8px}
+  .versionsmarke{bottom:4px;right:4px;font-size:10px;opacity:.75}
+  .seitenkopf .aktionen{margin-left:0}
+  .kopf{gap:8px}
+  .meldungen{left:12px;right:12px;bottom:28px;max-width:none}
+  .dialog-fuss .links{flex-basis:100%}
+  .schleier{padding:12px 8px}
+  .t td.nowrap .btn{margin-bottom:3px}
   .filterleiste input[type=search]{width:100%}
   .formular .halb{grid-column:auto}
+}
+@media (max-width:600px){
+  .formular.zwei{grid-template-columns:1fr}
+  .angebot-blatt{padding:18px 14px;font-size:12px}
+  .angebot-blatt .kopfzeile{flex-direction:column;gap:6px}
+  .angebot-blatt th,.angebot-blatt td{padding:5px 3px}
+  .angebot-blatt td:nth-child(2){overflow-wrap:anywhere}
+  .angebot-blatt th{font-size:11px}
 }
 @media print{
   body{background:#fff}
