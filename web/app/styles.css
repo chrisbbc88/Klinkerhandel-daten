@@ -243,6 +243,8 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}
 .formatliste{grid-template-columns:minmax(0,1fr)}
 .formatblock .formatmass{margin-left:auto;display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;font-variant-numeric:tabular-nums;min-width:0}
 .formatblock .knopfreihe:empty{display:none}
+.warn-text{color:var(--warn)}
+.formattexte{display:grid;gap:10px}
 .btn.umbruch{white-space:normal;text-align:left;height:auto}
 .mass-eingabe{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
 .mass-eingabe input{padding:4px 6px;text-align:right}

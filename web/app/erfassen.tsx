@@ -28,6 +28,7 @@ export function Erfassen() {
   const [beschreibung, setBeschreibung] = useState("");
   const [vk, setVk] = useState<number | null>(null);
   const [ek, setEk] = useState<number | null>(null);
+  const [vkFormat, setVkFormat] = useState<Record<string, number | null>>({});
   const [status, setStatus] = useState<"entwurf" | "pruefung">("entwurf");
   const [himshop, setHimshop] = useState<Produkt["hersteller_im_shop"]>("standard");
   const [datenblatt, setDatenblatt] = useState<{ name: string; sha: string; felder: string[] } | null>(null);
@@ -78,7 +79,7 @@ export function Erfassen() {
   const vorschauP: Produkt = {
     id: 0, version: 1, erstellt_am: "", geaendert_am: "", geaendert_von: "", stein_id: 0, art, sku: skuFuer(code, art), name: produktName(code, art, stein.herstellungsart),
     hersteller_id: stein.hersteller_id, woo_id: null, woo_slug: "", status, formate, bilder: [], riemchen_staerke_mm: art === "riemchen" ? staerke : null, eckriemchen: null,
-    kurztext: "", beschreibung, kurztext_shop_alt: "", preise: [], hersteller_im_shop: himshop, zuletzt_exportiert_version: null,
+    kurztext: "", beschreibung, kurztext_shop_alt: "", format_texte: [], preise: [], hersteller_im_shop: himshop, zuletzt_exportiert_version: null,
   };
   const pruef = [...pruefeStein(stein, d, [vorschauP]), ...pruefeProdukt(vorschauP, d)].filter((x) => x.regel !== "bild" && x.regel !== "bilder3" && x.regel !== "alt");
   const doppeltArt = vorhanden && (a.geschwister.get(vorhanden.id) ?? []).some((p) => p.art === art);
@@ -101,6 +102,7 @@ export function Erfassen() {
       const preise = [
         ...(vk ? [{ id: neueId(), preisart: "vk" as const, betrag: vk, einheit: "m2" as const, gueltig_ab: heute(), quelle: "manuell" as const, erfasst_von: von, erfasst_am: jetzt }] : []),
         ...(ek ? [{ id: neueId(), preisart: "ek" as const, betrag: ek, einheit: "m2" as const, gueltig_ab: heute(), quelle: "lieferant" as const, erfasst_von: von, erfasst_am: jetzt }] : []),
+        ...(formate.length > 1 ? formate.filter((f) => vkFormat[f]).map((f) => ({ id: neueId(), preisart: "vk" as const, betrag: vkFormat[f]!, einheit: "m2" as const, gueltig_ab: heute(), quelle: "manuell" as const, erfasst_von: von, erfasst_am: jetzt, format: f })) : []),
       ];
       const arten: ProduktArt[] = [art, ...(auchRiemchen && art === "verblender" && !vorhanden ? ["riemchen" as const] : [])];
       for (const ar of arten) {
@@ -157,6 +159,10 @@ export function Erfassen() {
             <div class="breit"><button class="btn klein" onClick={() => setBeschreibung(textVorschlag(vorschauP, stein, herstellerName(stein.hersteller_id)))}>Aus Stammdaten vorschlagen</button></div>
             <Feld label="VK netto €/m²"><Zahl wert={vk} setze={setVk} /></Feld>
             <Feld label="EK netto €/m²" hinweis="nur intern"><Zahl wert={ek} setze={setEk} /></Feld>
+            {formate.length > 1 && <>
+              <div class="breit muted klein">Abweichender VK je Format (optional, sonst gilt der VK oben):</div>
+              {formate.map((f) => <Feld label={`VK ${f} €/m²`}><Zahl wert={vkFormat[f] ?? null} setze={(v) => setVkFormat({ ...vkFormat, [f]: v })} /></Feld>)}
+            </>}
           </div>
         </Karte>
       </div>

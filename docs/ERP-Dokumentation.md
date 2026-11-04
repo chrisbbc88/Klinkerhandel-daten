@@ -164,12 +164,15 @@ Anlass: Termin mit dem Kunden am 03.11.2026 – derselbe Klinker (z. B. HBR 10-1
 | Druckfestigkeit, Wasseraufnahme, Frost, Gewicht, Artikelnr. Hersteller | Stein + Format | – (Prüfpunkt „empfohlen“) |
 | Bedarf je m² | Stein + Format | berechnet: 1 m² ÷ ((L + Stoßfuge) × (H + Lagerfuge)), Fugen 10/12 mm einstellbar |
 | Riemchenstärke, Eckriemchen | Produkt (Riemchen) | – |
-| VK/EK | Produkt, optional je Format | allgemeiner Preis des Produkts |
+| VK/EK | Produkt, je Format (ab v0.7 Übersicht, Sammelpflege, CSV) | allgemeiner Preis des Produkts |
+| Kurztext, Beschreibung | Produkt, je Format (ab v0.7) | allgemeiner Text des Produkts; Prüfpunkte „Text je Format fehlt“, „Texte zu ähnlich“ (Ähnlichkeit ≥ 60 % über Wortgruppen) |
 | Format im Angebot | Position | bei nur einem Format automatisch; sonst Pflicht vor dem Versand |
 
 **Normmaße:** DF 240×115×52, NF 240×115×71, 2DF 240×115×113 (DIN-Formate); WF 210×100×50, WDF 210×100×65 (Waalformate); RF 250×120×65 (Reichsformat). Übliche, herstellerabhängige Maße: LDF 290×90×52, XLDF 365×115×52. Ohne einheitliches Maß: LF, ModF, Modul, BDF, BDF-XL, BS – Maße aus dem Datenblatt am Stein oder einmal in den Stammdaten festlegen. Quellen: [hausjournal.net – Klinkermaße](https://www.hausjournal.net/klinker-masse), [Röben – Klinkerformate und Schichtmaße](https://www.roeben.com/en/clinker-formats-and-layer-dimensions), [Röben XLDF-Produktseite](https://en.roben.pl/facade/facade-products/polish-clinker-bricks/melbourne-xldf-red-smooth), [Baunetz Wissen – Modulformat](https://www.baunetzwissen.de/drucken/modulformat-4768202). Bitte vom Kunden bestätigen lassen, insbesondere LDF/XLDF und die Bedeutung von BDF, BS und Modul im eigenen Sortiment.
 
-**Offen beim Kunden:** Gibt es Preise je Format (dann je Format pflegen)? Sollen Formate im Shop als Varianten (variables Produkt mit Attribut „Format“) erscheinen oder weiter als Kategorie? Braucht jedes Format eine eigene Artikelnummer im Shop (z. B. „HBR 10-100 NF“)?
+**Entschieden 04.11.2026:** Preise und Texte (Kurztext, Beschreibung) werden je Format gepflegt; Ziel: keine doppelten Inhalte im Shop. Hinweis für den Shop-Umbau: Als Variante eines variablen WooCommerce-Produkts liegen alle Formate unter einer Adresse – doppelte Inhalte entstehen dort vor allem, wenn Formate als eigene Produktseiten angelegt werden. Die Texte je Format sind für beide Varianten nutzbar.
+
+**Offen beim Kunden:** Sollen Formate im Shop als Varianten (variables Produkt mit Attribut „Format“) erscheinen oder weiter als Kategorie? Braucht jedes Format eine eigene Artikelnummer im Shop (z. B. „HBR 10-100 NF“)?
 
 ### Anfrage → Angebot (Testversion ab v0.4.0)
 
@@ -265,6 +268,7 @@ Stand 02.11.2026, lokal geprüft:
 | Datenblatt-PDF ohne KI (pdf.js 3.11.174 lokal statt cdnjs): alle 8 Werte erkannt, übernommen, als geprüft vermerkt | bestanden |
 | KI-Datenblatt mit nachgestellter API-Antwort: Anfrage enthält PDF als Dokument, JSON-Schema und Browser-Header; Werte geprüft, ins Formular übernommen, Nummer aus Herstellerpräfix, Datenblatt am Stein vermerkt | bestanden (echte Claude-API nicht aufgerufen) |
 | Hersteller ausblenden: betroffene Produkte im Shop-Paket ohne Herstellername; Referenz anlegen, freigeben, im Paket mit Kategorien | bestanden |
+| v0.7.0: 44 automatische Tests (neu: Preise/Texte je Format in der Prüfung, Ähnlichkeitsprüfung, Format-CSV mit Preisen und Texten, KI-Texte je Format mit nachgestellter API-Antwort, Migration 0003). Browser-Durchlauf (25 Prüfpunkte): Texte je Format mit Vorschlag, Ähnlichkeitswarnung, KI-Entwurf (nachgestellte API), Verwerfen, Preise je Format im Produkt, Sammelpflege je Format, Erfassen mit VK je Format, CSV Export/Rück-Import, Handybreite; frühere Durchläufe (Smoke, v0.5, v0.6, Pipeline, Verloren, Dialoge) erneut bestanden | bestanden, keine Fehler in der Konsole |
 | v0.6.0: 41 automatische Tests (neu: Normmaße und Bedarf, Prüfung je Format, Umstellung alter Stände, Format-CSV, Angebot mit Format und Formatpreis, KI-Varianten, Migration 0002 auf befüllter Datenbank). Browser-Durchlauf (37 Prüfpunkte): Formatblöcke mit Normmaß und berechnetem Bedarf, abweichende Länge, Prüfwerte auf alle Formate, Riemchen sieht dieselben Werte, Verlauf je Format, Textvorschlag mit Maßen, Preis je Format, Datenblatt ohne KI mit Formaterkennung und Formatwahl, LF in Stammdaten festlegen, Angebot mit Format aus neuer Anfrage und Preiswechsel DF/NF, Format-CSV Export/Rück-Import ohne Änderung, Handybreite 390 px ohne Querscrollen | bestanden, keine Fehler in der Konsole |
 | v0.5.1: Layoutprüfung aller 27 Seiten bei 1440, 820 und 390 px Breite (kein Element außerhalb des Bildschirms oder seiner Karte), dazu Menü, E-Mail-Dialog, E-Mail-Anfrage und Suche auf dem Handy | bestanden |
 | v0.5.0: Seitenleiste mehrere Bereiche offen (bleibt nach Neuladen), Preisstaffel und Mindermenge im Angebot, Vier-Augen-Freigabe (Ersteller gesperrt, zweite Person gibt frei), E-Mail-Vorlagen mit Platzhaltern und Vermerk beim Kontakt, Vorlagen bearbeiten | bestanden |

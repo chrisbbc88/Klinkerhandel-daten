@@ -119,8 +119,8 @@ export function ImportExport() {
         <label class="check" style={{ marginBottom: 10 }}><input type="checkbox" checked={neueAnlegen} onChange={(e) => { const v = (e.target as HTMLInputElement).checked; setNeueAnlegen(v); if (datei) setPlan(produktImportPlanen(d, datei.text, { neueAnlegen: v })); }} /> Unbekannte Artikelnummern als neue Produkte anlegen</label>
         <button class="btn dunkel" disabled={z.nurLesen} onClick={csvWaehlen}><Icon n="upload" />CSV-Datei wählen…</button>
       </Karte>
-      <Karte titel="Formate und Technik">
-        <p class="muted" style={{ marginTop: 0 }}>Eine Zeile je Stein und Format mit Maßen, Druckfestigkeit, Wasseraufnahme, Frost und Bedarf. Normmaße und berechneter Bedarf stehen mit drin und bleiben beim Rück-Import unverändert.</p>
+      <Karte titel="Formate, Preise und Texte">
+        <p class="muted" style={{ marginTop: 0 }}>Eine Zeile je Stein und Format: Maße, Technik, Bedarf sowie VK/EK, Kurztext und Beschreibung für Verblender und Riemchen. Normmaße und berechneter Bedarf bleiben beim Rück-Import unverändert; neue Preise gelten ab „preis_gueltig_ab“.</p>
         <div class="knopfreihe">
           <button class="btn dunkel" onClick={() => herunterladen(`formate_${heute}.csv`, formateCsv(d), "text/csv;charset=utf-8")}><Icon n="download" />Exportieren</button>
           <button class="btn" disabled={z.nurLesen} onClick={formatCsvWaehlen}><Icon n="upload" />Importieren…</button>
@@ -182,7 +182,8 @@ export function ImportExport() {
           <tbody>{fplan.plan.zeilen.filter((x) => x.aktion !== "gleich").slice(0, 500).map((x) => <tr>
             <td class="num faint">{x.nr}</td><td class="mono nowrap">{x.hbr_code || "–"}</td><td class="mono">{x.format || "–"}</td>
             <td>{x.fehler.map((f) => <div style={{ color: "var(--bad)" }}>{f}</div>)}
-              {x.aenderungen.map((c) => <div class="klein"><b style={{ fontWeight: 500 }}>{c.label}:</b> <span class="diff-alt">{c.alt === null || c.alt === "" ? "–" : String(c.alt).replace(".", ",")}</span> → <span class="diff-neu">{c.neu === null || c.neu === "" ? "–" : String(c.neu).replace(".", ",")}</span></div>)}</td>
+              {x.aenderungen.map((c) => { const t = (v: unknown) => v === null || v === "" ? "–" : typeof v === "number" ? String(v).replace(".", ",") : String(v).length > 80 ? String(v).slice(0, 80) + "…" : String(v);
+                return <div class="klein"><b style={{ fontWeight: 500 }}>{c.label}:</b> <span class="diff-alt">{t(c.alt)}</span> → <span class="diff-neu">{t(c.neu)}</span>{(c.feld === "vk" || c.feld === "ek") ? ` ab ${x.gueltig_ab}` : ""}</div>; })}</td>
           </tr>)}
           {!fplan.plan.zeilen.some((x) => x.aktion !== "gleich") && <tr><td colSpan={4} class="leer">Keine Änderungen gegenüber dem ERP.</td></tr>}</tbody>
         </table>

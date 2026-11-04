@@ -507,3 +507,79 @@ test("E-Mail-Vorlagen: Platzhalter, passende Vorlage, eigene Anpassung", async (
   assert.equal(vorlageFuellen(alleVorlagen(d).find((x) => x.id === "angebot")!, d, v, k, "Tobi").betreff, "Angebot AN-2026-TO-003");
   assert.equal(passendeVorlage({ ...v, status: "neu" }, { ...k, plz: "", ort: "" }), "fehlende_angaben");
 });
+
+test("Formate: Preise und Texte je Format in der Prüfung", async () => {
+  const { pruefeProdukt } = await import("../web/lib/pruefung.ts");
+  const { formatTextSetzen, textAehnlichkeit } = await import("../web/lib/formate.ts");
+  const d = structuredClone(basis);
+  const p = d.produkte.find((x) => x.formate.includes("NF") && x.formate.includes("DF") && x.formate.length === 2)!;
+  const vk = (betrag: number, format?: string) => ({ id: Math.random(), preisart: "vk" as const, betrag, einheit: "m2" as const, gueltig_ab: "2026-01-01", quelle: "manuell" as const, erfasst_von: "t", erfasst_am: T0, ...(format ? { format } : {}) });
+  p.preise = [vk(92, "DF")];
+  const regel = (k: string) => pruefeProdukt(p, d).find((x) => x.regel === k);
+  assert.ok(regel("vk"));                                   // kein allgemeiner Preis
+  p.preise.push(vk(80));
+  assert.equal(regel("vk"), undefined);                     // NF nutzt den allgemeinen Preis
+  p.preise = [vk(92, "DF")]; p.preise.push(vk(85, "NF"));
+  assert.equal(aktuellerPreis(p, "vk")!.betrag, 92);        // ohne allgemeinen Preis zählt der jüngste Formatpreis
+  assert.ok(regel("textformat")!.text.includes("NF, DF") || regel("textformat")!.text.includes("DF, NF"));
+  const text = "Der Klinker im Normalformat überzeugt durch sein klassisches Maß von 240 mal 115 mal 71 Millimetern und ein ruhiges Fugenbild an der Fassade.";
+  p.format_texte = formatTextSetzen(p, "NF", { beschreibung: text });
+  p.format_texte = formatTextSetzen(p, "DF", { beschreibung: text.replace("ruhiges", "sehr ruhiges") });
+  assert.ok(textAehnlichkeit(text, text.replace("ruhiges", "sehr ruhiges")) >= 0.6);
+  assert.ok(regel("textdoppelt")!.text.includes("NF/DF") || regel("textdoppelt")!.text.includes("DF/NF"));
+  p.format_texte = formatTextSetzen(p, "DF", { beschreibung: "Flach und gestreckt: Das Dünnformat mit 52 Millimetern Höhe betont die Waagerechte, 63 Steine reichen für einen Quadratmeter Wandfläche." });
+  assert.equal(regel("textdoppelt"), undefined);
+  assert.equal(regel("textformat"), undefined);
+  // Leere Texte werden entfernt
+  assert.equal(formatTextSetzen(p, "NF", { beschreibung: "" }).length, 1);
+});
+
+test("Formate: Format-CSV mit Preisen und Texten je Produkt", async () => {
+  const { formateCsv, formatImportPlanen, formatImportAusfuehren } = await import("../web/lib/formatcsv.ts");
+  const { formatText } = await import("../web/lib/formate.ts");
+  const d = structuredClone(basis);
+  const v = d.produkte.find((x) => x.art === "verblender" && x.formate.length === 2 && x.formate.includes("NF") && d.produkte.some((r) => r.art === "riemchen" && r.stein_id === x.stein_id && r.formate.includes("NF")))!;
+  const r = d.produkte.find((x) => x.art === "riemchen" && x.stein_id === v.stein_id)!;
+  const s = d.steine.find((x) => x.id === v.stein_id)!;
+  v.preise = [{ id: 1, preisart: "vk", betrag: 80, einheit: "m2", gueltig_ab: "2026-01-01", quelle: "manuell", erfasst_von: "t", erfasst_am: T0 }];
+  // Rück-Import ohne Änderung, allgemeiner Preis wird nicht als Formatpreis exportiert
+  const csv = formateCsv(d);
+  assert.equal(formatImportPlanen(d, csv).zeilen.filter((z) => z.aktion !== "gleich").length, 0);
+  assert.ok(!csv.split("\n").find((z) => z.startsWith(`${s.hbr_code};NF`))!.includes(";80;"));
+  const plan = formatImportPlanen(d, [
+    "hbr_code;format;vk_verblender_m2;vk_riemchen_m2;beschreibung_verblender;kurztext_riemchen;preis_gueltig_ab",
+    `${s.hbr_code};NF;85,50;61;Eigener Text NF;Kurz NF R;01.12.2026`,
+    `${s.hbr_code};XLDF;99;;;;`,
+  ].join("\n"));
+  assert.equal(plan.zeilen[0].aktion, "aendern", JSON.stringify(plan.zeilen[0].fehler));
+  assert.equal(plan.zeilen[0].aenderungen.length, 4);
+  assert.equal(plan.zeilen[1].aktion, "fehler");          // Stein hat kein XLDF-Produkt
+  assert.equal(formatImportAusfuehren(d, plan, "Tobi"), 1);
+  const v2 = d.produkte.find((x) => x.id === v.id)!, r2 = d.produkte.find((x) => x.id === r.id)!;
+  assert.equal(aktuellerPreis(v2, "vk", "m2", "2026-12-01", "NF")!.betrag, 85.5);
+  assert.equal(aktuellerPreis(v2, "vk", "m2", "2026-12-01", v2.formate.find((f) => f !== "NF"))!.betrag, 80); // anderes Format: allgemein
+  assert.equal(aktuellerPreis(v2, "vk", "m2", "2026-11-30", "NF")!.betrag, 80);  // vor dem Gültigkeitsdatum
+  assert.equal(formatText(v2, "NF").beschreibung, "Eigener Text NF");
+  assert.equal(formatText(r2, "NF").kurztext, "Kurz NF R");
+  // Paket enthält Texte je Format
+  const e = wooPaket(d, [{ p: v2, grund: "geaendert" }], "Tobi").eintraege[0] as any;
+  assert.equal(e.varianten.find((x: any) => x.format === "NF").beschreibung, "Eigener Text NF");
+  assert.equal(e.varianten.find((x: any) => x.format !== "NF").beschreibung, null);
+  assert.ok(!JSON.stringify(e).includes("85.5")); // Preise gehen nie in den Shop
+});
+
+test("KI: Texte je Format werden auf bekannte Formate begrenzt", async () => {
+  const { kiFormatTexte, FORMAT_TEXT_SCHEMA } = await import("../web/lib/ki.ts");
+  assert.equal((FORMAT_TEXT_SCHEMA as any).additionalProperties, false);
+  const alt = globalThis.fetch;
+  let gesendet: any = null;
+  globalThis.fetch = (async (_u: string, o: any) => { gesendet = JSON.parse(o.body); return new Response(JSON.stringify({ stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 20 },
+    content: [{ type: "text", text: JSON.stringify({ texte: [{ format: "NF", kurztext: " K ", beschreibung: "B NF" }, { format: "XYZ", kurztext: "x", beschreibung: "x" }] }) }] }), { status: 200 }); }) as any;
+  try {
+    const r = await kiFormatTexte("sk-test", "claude-sonnet-5-5", { produkt: { hbr: "HBR 10-100", art: "Verblender", herstellungsart: "Handform", farben: ["rot"], oberflaechen: [], hersteller: "", allgemeiner_text: "" },
+      formate: [{ format: "NF", name: "Normalformat", masse: "240 × 115 × 71 mm", bedarf_stk_m2: 48, druckfestigkeit_nmm2: null, wasseraufnahme_proz: null, frostwiderstand: null, gewicht_kg: null }] });
+    assert.deepEqual(r.texte, [{ format: "NF", kurztext: "K", beschreibung: "B NF" }]);
+    assert.equal(gesendet.output_config.format.type, "json_schema");
+    assert.ok(gesendet.system.includes("deutlich voneinander"));
+  } finally { globalThis.fetch = alt; }
+});

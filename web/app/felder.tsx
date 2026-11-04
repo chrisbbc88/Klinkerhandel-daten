@@ -1,7 +1,10 @@
 // Formularfelder für Stein und Produkt (gemeinsam für Erfassen und Bearbeiten).
-import { z } from "./store.ts";
+import { z, melde } from "./store.ts";
 import { Feld, Text, Zahl, Auswahl, Chips } from "./ui.tsx";
-import { steinFormate, formatSetzen, formatWerte, MASS_QUELLE, type FormatWerte } from "../lib/formate.ts";
+import { steinFormate, formatSortierung, formatSetzen, formatWerte, formatText, formatTextSetzen, textAehnlichkeit, AEHNLICH_AB, FORMAT_CHARAKTER, MASS_QUELLE, type FormatWerte } from "../lib/formate.ts";
+import { useState, useEffect } from "preact/hooks";
+import { kiFormatTexte, KiFehler, type FormatTextEingabe } from "../lib/ki.ts";
+import { kiSchluessel } from "./ki.tsx";
 import { HERSTELLUNG, STATUS, OBERFLAECHEN, herstellerSichtbar, type Stein, type Produkt, type HerstellerImShop, type SteinFormat } from "../lib/modell.ts";
 
 export function SteinStamm({ s, set }: { s: Stein; set: (p: Partial<Stein>) => void }) {
@@ -138,4 +141,88 @@ export function HerstellerImShopFeld({ wert, herstellerId, setze }: { wert: Hers
   return <Feld label="Hersteller im Shop" hinweis={h ? (effektiv ? `${h.name} wird im Shop angezeigt` : "Hersteller bleibt intern, Kunden sehen ihn nicht") : undefined}>
     <Auswahl wert={wert} setze={setze} optionen={[["standard", `Standard (${standard})`], ["anzeigen", "anzeigen"], ["ausblenden", "ausblenden"]]} />
   </Feld>;
+}
+
+// ---------- Texte je Format ----------
+
+const zahlDe = (n: number) => String(n).replace(".", ",");
+
+/** Kurztext-Vorschlag für ein Format. */
+export function kurztextVorschlag(p: Produkt, s: Stein | undefined, f: string): string {
+  if (!s) return "";
+  const w = formatWerte(z.daten, s, f);
+  const m = masseTextFuer(p, w);
+  const h = s.herstellungsart ? HERSTELLUNG[s.herstellungsart] : "";
+  return [`${p.sku ?? s.hbr_code} im ${w.name} (${f})`, m, h, s.farben.join("/")].filter(Boolean).join(" · ");
+}
+function masseTextFuer(p: Produkt, w: FormatWerte) {
+  if (!w.laenge_mm || !w.hoehe_mm) return "";
+  return `${w.laenge_mm} × ${p.art === "riemchen" && p.riemchen_staerke_mm ? p.riemchen_staerke_mm : w.breite_mm ?? "?"} × ${w.hoehe_mm} mm`;
+}
+
+/** Beschreibungs-Vorschlag für ein Format: eigener Aufbau mit den Werten dieses Formats (keine KI). */
+export function formatTextVorschlag(p: Produkt, s: Stein | undefined, f: string, hersteller: string): string {
+  if (!s) return "";
+  if (!herstellerSichtbar(p, z.daten.hersteller.find((h) => h.id === s.hersteller_id))) hersteller = "";
+  const w = formatWerte(z.daten, s, f);
+  const art = p.art === "riemchen" ? "Klinkerriemchen" : "Verblendklinker";
+  const h = s.herstellungsart ? { handform: "handgeformte", strangpress: "stranggepresste", wasserstrich: "wasserstrichgeformte" }[s.herstellungsart] : "";
+  const farben = s.farben.length ? s.farben.join(", ").replace(/, ([^,]*)$/, " und $1") : "";
+  const m = masseTextFuer(p, w);
+  const technik = [w.druckfestigkeit_nmm2 ? `eine Druckfestigkeit von ${zahlDe(w.druckfestigkeit_nmm2)} N/mm²` : "", w.wasseraufnahme_proz != null ? `eine Wasseraufnahme von ${zahlDe(w.wasseraufnahme_proz)} %` : "",
+    w.frostwiderstand ? `Frostwiderstand ${w.frostwiderstand}` : ""].filter(Boolean);
+  return [
+    `Im ${w.name} (${f})${m ? ` mit ${m}` : ""} ist der ${p.sku ?? s.hbr_code} ein${h ? " " + h + "r" : ""} ${art}${hersteller ? ` von ${hersteller}` : ""}${farben ? ` in ${farben}` : ""}.`,
+    FORMAT_CHARAKTER[f] ?? "",
+    w.bedarf_stk_m2 ? `Für einen Quadratmeter Fassade rechnen Sie in diesem Format mit rund ${w.bedarf_stk_m2} Steinen.` : "",
+    technik.length ? `Laut Herstellerangaben hat das Format ${f} ${technik.join(", ").replace(/, ([^,]*)$/, " und $1")}.` : "",
+  ].filter(Boolean).join(" ");
+}
+
+/** Kurztext und Beschreibung je Format, mit Ähnlichkeitsprüfung und optionalem KI-Entwurf. */
+export function FormatTexte({ p, s, set, hersteller }: { p: Produkt; s: Stein | undefined; set: (x: Partial<Produkt>) => void; hersteller: string }) {
+  const reihe = [...p.formate].sort(formatSortierung(z.daten));
+  const [aktiv, setAktiv] = useState(reihe[0] ?? "");
+  const [laeuft, setLaeuft] = useState(false);
+  const f = p.formate.includes(aktiv) ? aktiv : reihe[0];
+  if (!f) return null;
+  const t = formatText(p, f);
+  const setzen = (x: Partial<{ kurztext: string; beschreibung: string }>) => set({ format_texte: formatTextSetzen(p, f, x) });
+  // Ähnlichkeit zu den anderen Texten
+  const vergleich = [["allgemeiner Text", p.beschreibung] as [string, string], ...reihe.filter((x) => x !== f).map((x) => [x, formatText(p, x).beschreibung] as [string, string])]
+    .filter(([, b]) => b.trim().length > 40 && t.beschreibung.trim().length > 40).map(([n, b]) => ({ n, w: textAehnlichkeit(t.beschreibung, b) })).sort((a, b) => b.w - a.w);
+  async function mitKi() {
+    const schluessel = await kiSchluessel();
+    if (!schluessel || !s) return;
+    const eingabe: FormatTextEingabe = {
+      produkt: { hbr: p.sku ?? s.hbr_code, art: p.art === "riemchen" ? "Riemchen" : "Verblender", herstellungsart: s.herstellungsart ? HERSTELLUNG[s.herstellungsart] : "", farben: s.farben, oberflaechen: s.oberflaechen,
+        hersteller: herstellerSichtbar(p, z.daten.hersteller.find((h) => h.id === s.hersteller_id)) ? hersteller : "", allgemeiner_text: p.beschreibung },
+      formate: reihe.map((x) => { const w = formatWerte(z.daten, s, x); return { format: x, name: w.name, masse: masseTextFuer(p, w), bedarf_stk_m2: w.bedarf_stk_m2, druckfestigkeit_nmm2: w.druckfestigkeit_nmm2, wasseraufnahme_proz: w.wasseraufnahme_proz, frostwiderstand: w.frostwiderstand, gewicht_kg: p.art === "riemchen" ? null : w.gewicht_kg }; }),
+    };
+    setLaeuft(true);
+    try {
+      const r = await kiFormatTexte(schluessel, z.daten.einstellungen.ki.modell, eingabe);
+      let liste = p.format_texte ?? [];
+      for (const x of r.texte) liste = formatTextSetzen({ format_texte: liste }, x.format, { kurztext: x.kurztext, beschreibung: x.beschreibung });
+      set({ format_texte: liste });
+      melde(`${r.texte.length} Textentwürfe eingesetzt – bitte lesen und dann speichern.`, "info");
+    } catch (e) { melde(e instanceof KiFehler ? e.message : `KI-Entwurf fehlgeschlagen: ${(e as Error).message}`, "fehler"); }
+    setLaeuft(false);
+  }
+  const [hatKi, setHatKi] = useState(false);
+  useEffect(() => { kiSchluessel().then((k) => setHatKi(!!k)); }, []);
+  return <div class="formattexte">
+    <div class="chips" role="tablist" aria-label="Format für Texte">{reihe.map((x) => { const tx = formatText(p, x); return <button type="button" role="tab" aria-selected={x === f}
+      class={`chip ${x === f ? "an" : ""}`} onClick={() => setAktiv(x)}>{x}{tx.beschreibung.trim() ? " ✓" : ""}</button>; })}</div>
+    <div class="formular">
+      <Feld label={`Kurztext ${f}`} klasse="breit"><textarea rows={2} value={t.kurztext} onInput={(e) => setzen({ kurztext: (e.target as HTMLTextAreaElement).value })} placeholder={p.kurztext || "leer = allgemeiner Kurztext"} /></Feld>
+      <Feld label={`Beschreibung ${f}`} klasse="breit" hinweis={vergleich[0] ? <span class={vergleich[0].w >= AEHNLICH_AB ? "warn-text" : ""}>Ähnlichkeit zu {vergleich[0].n}: {Math.round(vergleich[0].w * 100)} %{vergleich[0].w >= AEHNLICH_AB ? " – bitte stärker unterscheiden" : ""}</span> : undefined}>
+        <textarea rows={6} value={t.beschreibung} onInput={(e) => setzen({ beschreibung: (e.target as HTMLTextAreaElement).value })} placeholder="leer = allgemeine Produktbeschreibung" /></Feld>
+    </div>
+    <div class="knopfreihe">
+      <button type="button" class="btn klein" disabled={!s} onClick={() => setzen({ kurztext: t.kurztext || kurztextVorschlag(p, s, f), beschreibung: formatTextVorschlag(p, s, f, hersteller) })}>Vorschlag für {f} aus Stammdaten</button>
+      {hatKi && <button type="button" class="btn klein" disabled={laeuft || !s || z.nurLesen} onClick={mitKi}>{laeuft ? "KI schreibt…" : `Mit KI für alle ${p.formate.length} Formate entwerfen`}</button>}
+      <span class="muted klein">Jedes Format bekommt einen eigenen Text, damit im Shop keine doppelten Inhalte entstehen.</span>
+    </div>
+  </div>;
 }

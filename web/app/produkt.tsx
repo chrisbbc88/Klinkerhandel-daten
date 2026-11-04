@@ -3,11 +3,11 @@ import { useState, useMemo } from "preact/hooks";
 import { z, aendern, frage, melde, ich } from "./store.ts";
 import { ab, herstellerName, feldLabel, aenderungZeile, formatDiff } from "./abgeleitet.ts";
 import { Seitenkopf, Karte, Icon, Feld, Zahl, Auswahl, Score, geheZu, datum, datumZeit, relZeit, Text, initialen } from "./ui.tsx";
-import { SteinStamm, SteinTexte, FormatDaten, ProduktStamm, textVorschlag } from "./felder.tsx";
+import { SteinStamm, SteinTexte, FormatDaten, FormatTexte, ProduktStamm, textVorschlag } from "./felder.tsx";
 import { GepruefteDatenblaetter } from "./datenblatt.tsx";
 import { KiDatenblatt, type GeladeneDatei } from "./ki.tsx";
 import { aufSteinAnwenden, formatSchluesselLesen, type KiVorschlag } from "../lib/ki.ts";
-import { formatWerte, steinFormate } from "../lib/formate.ts";
+import { formatWerte, steinFormate, formatSortierung } from "../lib/formate.ts";
 import { ReferenzenZumStein } from "./referenzen.tsx";
 import { ART, STATUS, aktuellerPreis, heute, type Produkt, type Stein, type Preis } from "../lib/modell.ts";
 import { pruefeProdukt, pruefeStein } from "../lib/pruefung.ts";
@@ -117,6 +117,9 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
             <span class="muted klein">Erzeugt einen sachlichen Grundtext zum Weiterschreiben.</span>
           </div>
         </Karte>
+        {entwurf.p.formate.length > 1 && <Karte titel="Texte je Format" rechts={<span class="muted klein">Kurztext und Beschreibung für jede Variante</span>}>
+          <FormatTexte p={entwurf.p} s={entwurf.s} set={setP} hersteller={herstellerName(entwurf.s?.hersteller_id)} />
+        </Karte>}
         {entwurf.s && <Karte titel={<h2>Stein {s!.hbr_code}</h2>} rechts={geschwister.length ? <span class="marke info">gilt auch für {geschwister.map((g) => g.sku).join(", ")}</span> : undefined}>
           <SteinStamm s={entwurf.s} set={setS} />
           <h3 style={{ margin: "18px 0 10px" }}>Formate und technische Daten</h3>
@@ -136,12 +139,11 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
           {pruef.length === 0 ? <p class="muted" style={{ margin: 0 }}>Alles vollständig.</p> :
             <ul class="pruefliste">{pruef.map((x) => <li><span class={`marke ${x.schwere === "pflicht" ? "bad" : "warn"}`}>{x.schwere === "pflicht" ? "Pflicht" : "Empfohlen"}</span>{x.text}</li>)}</ul>}
         </Karte>
-        <Karte titel="Preise je m²" rechts={<button class="btn klein" onClick={() => tab("preise")}>Pflegen</button>}>
-          <dl class="dl">
+        <Karte titel="Preise je m²" rechts={<button class="btn klein" onClick={() => tab("preise")}>Pflegen</button>} ohnePadding={p.formate.length > 1}>
+          {p.formate.length > 1 ? <PreisUebersicht p={p} /> : <dl class="dl">
             <dt>EK</dt><dd>{aktuellerPreis(p, "ek") ? euro(aktuellerPreis(p, "ek")!.betrag) : "–"}</dd>
             <dt>VK</dt><dd>{aktuellerPreis(p, "vk") ? euro(aktuellerPreis(p, "vk")!.betrag) : "–"}</dd>
-            {p.formate.filter((f) => p.preise.some((x) => x.format === f)).map((f) => <><dt>VK {f}</dt><dd>{aktuellerPreis(p, "vk", "m2", undefined, f) ? euro(aktuellerPreis(p, "vk", "m2", undefined, f)!.betrag) : "–"}</dd></>)}
-          </dl>
+          </dl>}
         </Karte>
         {s && <ReferenzenZumStein steinId={s.id} />}
         <Karte titel="Aktionen">
@@ -231,6 +233,10 @@ function Preise({ p }: { p: Produkt }) {
   }
   const h = heute();
   return <div class="raster r-2-1">
+    <div class="raster" style={{ alignContent: "start" }}>
+    {p.formate.length > 1 && <Karte titel="Aktuelle Preise je Format" ohnePadding rechts={<span class="muted klein">ohne eigenen Formatpreis gilt der allgemeine Preis</span>}>
+      <PreisUebersicht p={p} waehlen={(f) => setFormat(f)} />
+    </Karte>}
     <Karte titel="Preisverlauf" ohnePadding>
       <div class="tabelle-wrap"><table class="t">
         <thead><tr><th>Art</th><th>Format</th><th>Einheit</th><th class="num">Betrag netto</th><th>gültig ab</th><th>Quelle</th><th>erfasst</th><th></th></tr></thead>
@@ -252,8 +258,9 @@ function Preise({ p }: { p: Produkt }) {
         </tbody>
       </table></div>
     </Karte>
+    </div>
     <div class="raster" style={{ alignContent: "start" }}>
-      <Karte titel="Neuer Preis">
+      <Karte titel={format ? `Neuer Preis für ${format}` : "Neuer Preis"}>
         <div class="formular zwei">
           <Feld label="Preisart"><Auswahl wert={art} setze={setArt} optionen={[["vk", "Verkauf (VK)"], ["ek", "Einkauf (EK)"]]} /></Feld>
           <Feld label="Einheit"><Auswahl wert={einheit} setze={setEinheit} optionen={[["m2", "je m²"], ["stk", "je Stück"], ["pal", "je Palette"]]} /></Feld>
@@ -277,6 +284,22 @@ function Preise({ p }: { p: Produkt }) {
       </Karte>}
     </div>
   </div>;
+}
+
+/** Aktuelle EK/VK je Format; Herkunft „eigener Preis“ oder „allgemein“. */
+function PreisUebersicht({ p, waehlen }: { p: Produkt; waehlen?: (f: string) => void }) {
+  const zelle = (art: "ek" | "vk", f: string) => {
+    const x = aktuellerPreis(p, art, "m2", undefined, f);
+    if (!x) return <span class="faint">–</span>;
+    return <>{euro(x.betrag)}{!x.format && <span class="faint klein"> allg.</span>}</>;
+  };
+  return <div class="tabelle-wrap"><table class="t">
+    <thead><tr><th>Format</th><th class="num">EK/m²</th><th class="num">VK/m²</th><th class="num">Aufschlag</th>{waehlen && <th></th>}</tr></thead>
+    <tbody>{[...p.formate].sort(formatSortierung(z.daten)).map((f) => { const e = aktuellerPreis(p, "ek", "m2", undefined, f), v = aktuellerPreis(p, "vk", "m2", undefined, f);
+      return <tr><td class="mono">{f}</td><td class="num">{zelle("ek", f)}</td><td class="num">{zelle("vk", f)}</td>
+        <td class="num">{e && v ? `${((v.betrag / e.betrag - 1) * 100).toFixed(0)} %` : "–"}</td>
+        {waehlen && <td><button class="btn klein link" onClick={() => waehlen(f)}>Preis für {f}</button></td>}</tr>; })}</tbody>
+  </table></div>;
 }
 
 function Hinweise({ p, s, pruef }: { p: Produkt; s?: Stein; pruef: { regel: string; schwere: string; text: string }[] }) {

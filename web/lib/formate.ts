@@ -4,7 +4,7 @@
 // Wasseraufnahme, Frost und Bedarf je m² hängen vom Format ab und werden deshalb je Format geführt.
 // Gespeichert wird nur, was jemand eingetragen hat (Stein.format_daten). Fehlt ein Maß, gilt das
 // Normmaß aus den Stammdaten (Daten.formate); der Bedarf je m² wird aus Länge, Höhe und Fugen berechnet.
-import type { Daten, Format, Produkt, Stein, SteinFormat } from "./modell.ts";
+import type { Daten, Format, FormatText, Produkt, Stein, SteinFormat } from "./modell.ts";
 
 export type MassQuelle = "eingetragen" | "norm" | "ueblich" | "festgelegt";
 export const MASS_QUELLE: Record<MassQuelle, string> = {
@@ -149,3 +149,56 @@ export function formateNormalisieren(formate: Format[]): Format[] {
   }
   return formate;
 }
+
+// ---------- Texte je Format ----------
+
+export function formatText(p: Pick<Produkt, "format_texte">, format: string): FormatText {
+  return p.format_texte?.find((x) => x.format === format) ?? { format, kurztext: "", beschreibung: "" };
+}
+
+/** Setzt Kurztext/Beschreibung eines Formats; leere Einträge werden entfernt. */
+export function formatTextSetzen(p: Pick<Produkt, "format_texte">, format: string, patch: Partial<Omit<FormatText, "format">>): FormatText[] {
+  const liste = (p.format_texte ?? []).map((x) => ({ ...x }));
+  let t = liste.find((x) => x.format === format);
+  if (!t) { t = { format, kurztext: "", beschreibung: "" }; liste.push(t); }
+  Object.assign(t, patch);
+  return liste.filter((x) => x.kurztext.trim() || x.beschreibung.trim());
+}
+
+const woerter = (t: string) => t.toLowerCase().replace(/[^a-zäöüß0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
+/** Ähnlichkeit zweier Texte (0–1) über Wortgruppen aus drei Wörtern. Siehe AEHNLICH_AB. */
+export function textAehnlichkeit(a: string, b: string): number {
+  const gruppen = (t: string) => { const w = woerter(t); const s = new Set<string>(); for (let i = 0; i + 2 < w.length; i++) s.add(w.slice(i, i + 3).join(" ")); if (!s.size && w.length) s.add(w.join(" ")); return s; };
+  const x = gruppen(a), y = gruppen(b);
+  if (!x.size || !y.size) return 0;
+  let gleich = 0;
+  for (const g of x) if (y.has(g)) gleich++;
+  return gleich / (x.size + y.size - gleich);
+}
+
+/** Ab dieser Ähnlichkeit gilt ein Text als fast doppelt (z. B. gleiche Vorlage, nur Format und Maße getauscht). */
+export const AEHNLICH_AB = 0.6;
+
+/** Paare von Formattexten (und allgemeinem Text), die sich zu sehr ähneln. */
+export function aehnlicheTexte(p: Pick<Produkt, "beschreibung" | "format_texte" | "formate">): { a: string; b: string; wert: number }[] {
+  const texte = ([["allgemein", p.beschreibung], ...p.formate.map((f) => [f, formatText(p, f).beschreibung])] as [string, string][]).filter(([, t]) => t.trim().length > 40);
+  const out: { a: string; b: string; wert: number }[] = [];
+  for (let i = 0; i < texte.length; i++) for (let j = i + 1; j < texte.length; j++) {
+    const w = textAehnlichkeit(texte[i][1], texte[j][1]);
+    if (w >= AEHNLICH_AB) out.push({ a: texte[i][0], b: texte[j][0], wert: w });
+  }
+  return out;
+}
+
+/** Kurzer Charakter eines Formats für Textvorschläge (allgemeines Fachwissen, vom Bearbeiter zu prüfen). */
+export const FORMAT_CHARAKTER: Record<string, string> = {
+  WF: "Das kleine Waalformat stammt aus der niederländischen Tradition und erzeugt durch die vielen Fugen ein lebendiges, feingliedriges Fassadenbild.",
+  WDF: "Das Waaldickformat ist etwas höher als das Waalformat und wirkt dadurch kräftiger, behält aber den kleinteiligen Charakter.",
+  DF: "Das flache Dünnformat betont die Waagerechte und lässt die Fassade gestreckt und ruhig wirken.",
+  NF: "Das Normalformat ist das klassische deutsche Ziegelformat mit ausgewogenem Verhältnis von Länge und Höhe.",
+  "2DF": "Das hohe Format 2DF ergibt ein großzügiges Fugenbild und einen zügigen Baufortschritt.",
+  RF: "Das Reichsformat ist ein historisches Format, das sich besonders für Sanierungen und Ergänzungen an Altbauten eignet.",
+  LDF: "Das lange Dünnformat streckt die Fassade optisch und passt gut zu moderner Architektur.",
+  XLDF: "Das extra lange Dünnformat betont die Horizontale besonders stark und gibt der Fassade eine sehr moderne, ruhige Wirkung.",
+  LF: "Das Langformat setzt mit seiner gestreckten Form deutliche horizontale Linien.",
+};

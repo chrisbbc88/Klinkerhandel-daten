@@ -31,7 +31,7 @@ test("Migration 0002 ordnet vorhandene Steinwerte dem Format zu und erhält alle
       await stein("HBR 99-003", { wasseraufnahme_proz: 6.5 }, ["NF", "LF"]);
       await stein("HBR 99-004", {}, ["NF"]);
     });
-    assert.deepEqual(await migrieren(db), ["0002_stein_format.sql"]);
+    assert.deepEqual(await migrieren(db), ["0002_stein_format.sql", "0003_format_texte.sql"]);
     const zeilen = await db.query<{ hbr_code: string; format: string; quelle: string; druckfestigkeit_nmm2: string | null }>(
       "SELECT s.hbr_code, sf.format, sf.quelle, sf.druckfestigkeit_nmm2 FROM stein_format sf JOIN stein s ON s.id = sf.stein_id ORDER BY 1, 2");
     assert.deepEqual(zeilen.map((z) => [z.hbr_code, z.format, z.quelle]), [
@@ -52,6 +52,9 @@ test("Migration 0002 ordnet vorhandene Steinwerte dem Format zu und erhält alle
       const pid = Number((await tx.query("SELECT id FROM produkt WHERE sku='HBR 99-001'"))[0].id);
       await tx.query("INSERT INTO preis (produkt_id, preisart, betrag, einheit, gueltig_ab, quelle, erfasst_von, format) VALUES ($1,'vk',95,'m2','2026-11-01','manuell',$2,'DF')", [pid, sys]);
     }), /preis_eindeutig_idx|unique/);
+    // Texte je Format (0003)
+    await db.transaktion(sys, (tx) => tx.query("UPDATE produkt_format SET beschreibung = 'Text NF' WHERE format = 'NF' AND produkt_id = (SELECT id FROM produkt WHERE sku = 'HBR 99-001')"));
+    assert.equal((await db.query("SELECT beschreibung FROM produkt_format WHERE format = 'NF' AND beschreibung IS NOT NULL"))[0].beschreibung, "Text NF");
     // Schreiben in stein_format wird protokolliert
     await db.transaktion(sys, (tx) => tx.query("UPDATE stein_format SET druckfestigkeit_nmm2 = 40 WHERE format = 'WF'"));
     assert.equal((await db.query("SELECT count(*)::int AS n FROM aenderung WHERE tabelle = 'stein_format'"))[0].n, 1);

@@ -3,6 +3,16 @@
 Die Versionsnummer steht unten rechts auf jeder Seite der Testversion (Klick öffnet Einstellungen › Über das ERP).
 Jede ausgelieferte `index.html` erhält eine neue Nummer (`package.json` → `version`, dann `npm run build:web`).
 
+## v0.7.0 – 04.11.2026
+- **Preise je Format übersichtlich:** Im Produkt (Reiter Preise und Daten) eine Tabelle „Aktuelle Preise je Format“ mit EK, VK und Aufschlag je Format; „allg.“ zeigt, wo noch der allgemeine Preis gilt. Ein Klick auf „Preis für DF“ stellt das Formular auf dieses Format.
+- **Preispflege (Produkte › Preise)** jetzt mit einer Zeile je Produkt und Format, Filter nach Format, Aufschlagsregel und Sammelspeichern je Format.
+- **Produkt erfassen:** optional abweichender VK je Format.
+- **Kurztext und Beschreibung je Format** (Karte „Texte je Format“ am Produkt): eigener Text je Variante, Vorschlag aus den Stammdaten mit Maßen, Bedarf und Prüfwerten des Formats, optional KI-Entwurf für alle Formate (eigener Claude-Schlüssel, Text wird erst nach Prüfung gespeichert).
+- **Schutz vor doppelten Inhalten:** Ähnlichkeit zu den anderen Formattexten und zum allgemeinen Text wird angezeigt; ab 60 % Warnung und Prüfpunkt „Texte zu ähnlich“. Neuer Prüfpunkt „Text je Format fehlt“ bei Produkten mit mehreren Formaten; „Kein Verkaufspreis“ nennt Formate ohne Preis.
+- **CSV „Formate, Preise und Texte“:** zusätzlich VK/EK, Kurztext und Beschreibung für Verblender und Riemchen je Format, neue Preise mit „preis_gueltig_ab“.
+- Shop-Paket: Kurztext und Beschreibung je Variante (Preise gehen weiterhin nicht in den Shop).
+- Server-Version: Migration `0003_format_texte.sql` (Kurztext und Beschreibung in `produkt_format`).
+
 ## v0.6.0 – 03.11.2026
 - **Formate als Varianten eines Steins:** Maße, Druckfestigkeit, Wasseraufnahme, Frost, Gewicht, Bedarf je m² und Hersteller-Artikelnummer werden je Format (NF, DF, WF …) geführt statt einmal je Stein. Verblender und Riemchen teilen sich diese Werte; welche Formate ein Produkt anbietet, wird weiterhin am Produkt gewählt.
 - **Normmaße automatisch:** DF 240×115×52, NF 240×115×71, 2DF 240×115×113, WF 210×100×50, WDF 210×100×65, RF 250×120×65 als Normmaß; LDF 290×90×52 und XLDF 365×115×52 als übliche (herstellerabhängige) Maße. Leere Maßfelder zeigen das Normmaß; eingetragen wird nur, was laut Datenblatt abweicht. Formate ohne einheitliches Maß (LF, ModF, Modul, BDF, BDF-XL, BS) können in den Stammdaten festgelegt werden; neue Formate lassen sich anlegen.

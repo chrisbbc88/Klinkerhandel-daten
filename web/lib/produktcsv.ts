@@ -200,7 +200,7 @@ export function produktImportAusfuehren(d: Daten, plan: ImportPlan, von: string,
         id: neueId(), version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von,
         stein_id: s.id, art: z.neu.art, sku: skuFuer(z.neu.hbr_code, z.neu.art), name: produktName(z.neu.hbr_code, z.neu.art, s.herstellungsart),
         hersteller_id: s.hersteller_id, woo_id: null, woo_slug: "", status: "entwurf", formate: [], bilder: [],
-        riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: "", preise: [], hersteller_im_shop: "standard", zuletzt_exportiert_version: null,
+        riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: "", format_texte: [], preise: [], hersteller_im_shop: "standard", zuletzt_exportiert_version: null,
       } satisfies Produkt, von, jetzt);
       neu++;
     } else geaendert++;

@@ -2,7 +2,7 @@
 // Die Browser-Version veröffentlicht nicht selbst (der API-Schlüssel darf nicht in eine öffentliche Seite).
 import { HERSTELLUNG, ART, herstellerSichtbar, type Daten, type Produkt, type Referenz } from "./modell.ts";
 import { protokolliere } from "./aendern.ts";
-import { formatWerte } from "./formate.ts";
+import { formatWerte, formatText } from "./formate.ts";
 
 export const BILD_BASIS = "https://www.klinkerhandel.de/wp-content/uploads/";
 export const bildUrl = (datei: string) => (/^(https?:|data:|blob:)/.test(datei) ? datei : BILD_BASIS + datei);
@@ -72,6 +72,8 @@ export function wooPaket(d: Daten, kandidaten: ExportKandidat[], von: string, je
               masse_normmass: w.masse_quelle !== null && w.masse_quelle !== "eingetragen",
               gewicht_kg: p.art === "riemchen" ? null : w.gewicht_kg, druckfestigkeit_nmm2: w.druckfestigkeit_nmm2,
               wasseraufnahme_proz: w.wasseraufnahme_proz, frostwiderstand: w.frostwiderstand, bedarf_stk_m2: w.bedarf_stk_m2,
+              // eigener Text je Format; null = allgemeiner Text des Produkts gilt
+              kurztext: formatText(p, f).kurztext || null, beschreibung: formatText(p, f).beschreibung || null,
             };
           }),
           kurztext: p.kurztext, beschreibung: p.beschreibung, bilder: bildListe(p.bilder),

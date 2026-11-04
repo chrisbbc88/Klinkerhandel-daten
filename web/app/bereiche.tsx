@@ -9,27 +9,41 @@ import { bildUrl } from "../lib/woo.ts";
 import { euro } from "../lib/angebot.ts";
 
 // ---------- Preise ----------
+/** Eine Zeile je Produkt und Format. Bei Produkten mit nur einem Format gilt der Preis allgemein (ohne Format). */
+interface PreisZeile { k: string; p: Produkt; format: string; eigen: boolean }
+
 export function PreisPflege() {
   const d = z.daten, a = ab();
-  const [q, setQ] = useState(""); const [herst, setHerst] = useState(""); const [art, setArt] = useState(""); const [nurOhne, setNurOhne] = useState(false);
-  const [neu, setNeu] = useState<Record<number, { vk?: number | null; ek?: number | null }>>({});
+  const [q, setQ] = useState(""); const [herst, setHerst] = useState(""); const [art, setArt] = useState(""); const [fmt, setFmt] = useState(""); const [nurOhne, setNurOhne] = useState(false);
+  const [neu, setNeu] = useState<Record<string, { vk?: number | null; ek?: number | null }>>({});
   const [abDatum, setAbDatum] = useState(heute());
   const [regel, setRegel] = useState<"aufschlag" | "erhoehen">("aufschlag");
   const [prozent, setProzent] = useState<number | null>(null);
   const [seite, setSeite] = useState(0);
+  const pr = (z_: PreisZeile, art_: "ek" | "vk") => aktuellerPreis(z_.p, art_, "m2", undefined, z_.eigen ? z_.format : undefined);
 
-  const liste = useMemo(() => d.produkte.filter((p) => {
-    if (p.status === "archiviert" || p.art === "nistklinker") return false;
-    const s = p.stein_id ? a.steine.get(p.stein_id) : undefined;
-    if (herst && String(s?.hersteller_id) !== herst) return false;
-    if (art && p.art !== art) return false;
-    if (nurOhne && aktuellerPreis(p, "vk")) return false;
-    if (q && !`${p.sku} ${p.name}`.toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  }), [z.rev, q, herst, art, nurOhne]);
-  const { sortiert, Kopf } = useSortierung<Produkt>(liste, "sku", {
-    sku: (p) => p.sku ?? "", ek: (p) => aktuellerPreis(p, "ek")?.betrag ?? null, vk: (p) => aktuellerPreis(p, "vk")?.betrag ?? null,
-    auf: (p) => { const e = aktuellerPreis(p, "ek"), v = aktuellerPreis(p, "vk"); return e && v ? v.betrag / e.betrag : null; },
+  const liste = useMemo(() => {
+    const out: PreisZeile[] = [];
+    for (const p of d.produkte) {
+      if (p.status === "archiviert" || p.art === "nistklinker") continue;
+      const s = p.stein_id ? a.steine.get(p.stein_id) : undefined;
+      if (herst && String(s?.hersteller_id) !== herst) continue;
+      if (art && p.art !== art) continue;
+      if (q && !`${p.sku} ${p.name}`.toLowerCase().includes(q.toLowerCase())) continue;
+      const formate = p.formate.length > 1 ? p.formate : [p.formate[0] ?? ""];
+      for (const f of formate) {
+        if (fmt && f !== fmt) continue;
+        const zz: PreisZeile = { k: `${p.id}:${f}`, p, format: f, eigen: p.formate.length > 1 };
+        const v = pr(zz, "vk");
+        if (nurOhne && (zz.eigen ? v?.format === f : !!v)) continue;
+        out.push(zz);
+      }
+    }
+    return out;
+  }, [z.rev, q, herst, art, fmt, nurOhne]);
+  const { sortiert, Kopf } = useSortierung<PreisZeile>(liste, "sku", {
+    sku: (x) => `${x.p.sku ?? ""} ${x.format}`, ek: (x) => pr(x, "ek")?.betrag ?? null, vk: (x) => pr(x, "vk")?.betrag ?? null,
+    auf: (x) => { const e = pr(x, "ek"), v = pr(x, "vk"); return e && v ? v.betrag / e.betrag : null; },
   });
   const offen = Object.entries(neu).filter(([, v]) => v.vk || v.ek);
 
@@ -37,34 +51,38 @@ export function PreisPflege() {
     if (prozent == null) return;
     const n: typeof neu = { ...neu };
     let k = 0;
-    for (const p of liste) {
-      const e = aktuellerPreis(p, "ek")?.betrag, v = aktuellerPreis(p, "vk")?.betrag;
+    for (const x of liste) {
+      const e = pr(x, "ek")?.betrag, v = pr(x, "vk")?.betrag;
       const basis = regel === "aufschlag" ? e : v;
       if (!basis) continue;
-      n[p.id] = { ...n[p.id], vk: Math.round(basis * (1 + prozent / 100) * 100) / 100 }; k++;
+      n[x.k] = { ...n[x.k], vk: Math.round(basis * (1 + prozent / 100) * 100) / 100 }; k++;
     }
     setNeu(n);
     melde(`${k} neue VK-Preise vorgeschlagen. Bitte prüfen und dann speichern.`, "info");
   }
 
   async function speichern() {
-    if (offen.length > 50 && !(await frage(`${offen.length} Produkte erhalten neue Preise ab ${datum(abDatum)}.`, "Preise speichern", "Speichern"))) return;
+    if (offen.length > 50 && !(await frage(`${offen.length} Preiszeilen erhalten neue Preise ab ${datum(abDatum)}.`, "Preise speichern", "Speichern"))) return;
     aendern((dd, von) => {
       const jetzt = new Date().toISOString();
-      for (const [id, v] of offen) {
-        const p = dd.produkte.find((x) => x.id === Number(id))!;
-        const add: Preis[] = [];
-        if (v.vk) add.push({ id: neueId(), preisart: "vk", betrag: v.vk, einheit: "m2", gueltig_ab: abDatum, quelle: "manuell", erfasst_von: von, erfasst_am: jetzt });
-        if (v.ek) add.push({ id: neueId(), preisart: "ek", betrag: v.ek, einheit: "m2", gueltig_ab: abDatum, quelle: "lieferant", erfasst_von: von, erfasst_am: jetzt });
-        aendere(dd, "produkte", p.id, { preise: [...p.preise, ...add] }, von);
+      const jeProdukt = new Map<number, Preis[]>();
+      for (const [k, v] of offen) {
+        const [id, f] = [Number(k.split(":")[0]), k.slice(k.indexOf(":") + 1)];
+        const p = dd.produkte.find((x) => x.id === id)!;
+        const format = p.formate.length > 1 && f ? { format: f } : {};
+        const add = jeProdukt.get(id) ?? [];
+        if (v.vk) add.push({ id: neueId(), preisart: "vk", betrag: v.vk, einheit: "m2", gueltig_ab: abDatum, quelle: "manuell", erfasst_von: von, erfasst_am: jetzt, ...format });
+        if (v.ek) add.push({ id: neueId(), preisart: "ek", betrag: v.ek, einheit: "m2", gueltig_ab: abDatum, quelle: "lieferant", erfasst_von: von, erfasst_am: jetzt, ...format });
+        jeProdukt.set(id, add);
       }
+      for (const [id, add] of jeProdukt) { const p = dd.produkte.find((x) => x.id === id)!; aendere(dd, "produkte", id, { preise: [...p.preise, ...add] }, von); }
     }, `${offen.length} Preise gespeichert.`);
     setNeu({});
   }
 
   const sichtbar = sortiert.slice(seite * 50, seite * 50 + 50);
   return <>
-    <Seitenkopf titel="Preise" text="Einkaufs- und Verkaufspreise je m² pflegen. Neue Preise werden mit Gültigkeitsdatum ergänzt, alte bleiben im Verlauf.">
+    <Seitenkopf titel="Preise" text="Einkaufs- und Verkaufspreise je m², bei mehreren Formaten je Format. Neue Preise werden mit Gültigkeitsdatum ergänzt, alte bleiben im Verlauf.">
       <span class="muted">gültig ab</span><input type="date" style={{ width: 150 }} value={abDatum} onInput={(e) => setAbDatum((e.target as HTMLInputElement).value)} />
       <button class="btn primaer" disabled={!offen.length || z.nurLesen} onClick={speichern}>{offen.length} Preise speichern</button>
     </Seitenkopf>
@@ -73,7 +91,8 @@ export function PreisPflege() {
         <input type="search" placeholder="Suche" value={q} onInput={(e) => { setQ((e.target as HTMLInputElement).value); setSeite(0); }} />
         <Auswahl wert={herst} setze={(v) => { setHerst(v); setSeite(0); }} optionen={d.hersteller.map((h) => [String(h.id), h.name] as [string, string])} leer="Alle Hersteller" />
         <Auswahl wert={art} setze={(v) => { setArt(v); setSeite(0); }} optionen={[["verblender", "Verblender"], ["riemchen", "Riemchen"], ["daemmklinker", "Dämmklinker"]]} leer="Alle Arten" />
-        <label class="check"><input type="checkbox" checked={nurOhne} onChange={(e) => { setNurOhne((e.target as HTMLInputElement).checked); setSeite(0); }} /> nur ohne VK</label>
+        <Auswahl wert={fmt} setze={(v) => { setFmt(v); setSeite(0); }} optionen={d.formate.map((f) => [f.kuerzel, f.kuerzel] as [string, string])} leer="Alle Formate" aria-label="Format" />
+        <label class="check"><input type="checkbox" checked={nurOhne} onChange={(e) => { setNurOhne((e.target as HTMLInputElement).checked); setSeite(0); }} /> nur ohne eigenen VK</label>
         <span style={{ marginLeft: "auto" }} class="knopfreihe">
           <Auswahl wert={regel} setze={setRegel} optionen={[["aufschlag", "VK = EK + Aufschlag"], ["erhoehen", "VK erhöhen um"]]} />
           <span style={{ width: 70 }}><Zahl wert={prozent} setze={setProzent} aria-label="Prozent" /></span>%
@@ -82,23 +101,26 @@ export function PreisPflege() {
       </div>
       <div class="tabelle-wrap">
         <table class="t">
-          <thead><tr><Kopf feld="sku">Artikelnummer</Kopf><th>Art</th><th>Hersteller</th><Kopf feld="ek" klasse="num">EK/m²</Kopf><th style={{ width: 110 }}>neuer EK</th><Kopf feld="vk" klasse="num">VK/m²</Kopf><th style={{ width: 110 }}>neuer VK</th><Kopf feld="auf" klasse="num">Aufschlag</Kopf></tr></thead>
-          <tbody>{sichtbar.map((p) => {
-            const e = aktuellerPreis(p, "ek"), v = aktuellerPreis(p, "vk"), n = neu[p.id] ?? {};
+          <thead><tr><Kopf feld="sku">Artikelnummer</Kopf><th>Format</th><th>Art</th><th>Hersteller</th><Kopf feld="ek" klasse="num">EK/m²</Kopf><th style={{ width: 110 }}>neuer EK</th><Kopf feld="vk" klasse="num">VK/m²</Kopf><th style={{ width: 110 }}>neuer VK</th><Kopf feld="auf" klasse="num">Aufschlag</Kopf></tr></thead>
+          <tbody>{sichtbar.map((x) => {
+            const p = x.p, e = pr(x, "ek"), v = pr(x, "vk"), n = neu[x.k] ?? {};
             const ee = n.ek ?? e?.betrag, vv = n.vk ?? v?.betrag;
+            const allg = (y: Preis | null) => (x.eigen && y && !y.format ? <span class="faint klein"> allg.</span> : null);
             return <tr>
               <td><a class="mono" href={`#/produkte/${p.id}/preise`}>{p.sku ?? p.name.slice(0, 30)}</a></td>
+              <td class="mono">{x.format || "–"}</td>
               <td>{ART[p.art]}</td><td>{herstellerName(a.steine.get(p.stein_id ?? -1)?.hersteller_id)}</td>
-              <td class="num">{e ? euro(e.betrag) : "–"}</td>
-              <td><Zahl wert={n.ek ?? null} setze={(x) => setNeu({ ...neu, [p.id]: { ...n, ek: x } })} aria-label={`Neuer EK ${p.sku}`} /></td>
-              <td class="num">{v ? euro(v.betrag) : "–"}</td>
-              <td><Zahl wert={n.vk ?? null} setze={(x) => setNeu({ ...neu, [p.id]: { ...n, vk: x } })} aria-label={`Neuer VK ${p.sku}`} /></td>
+              <td class="num">{e ? euro(e.betrag) : "–"}{allg(e)}</td>
+              <td><Zahl wert={n.ek ?? null} setze={(y) => setNeu({ ...neu, [x.k]: { ...n, ek: y } })} aria-label={`Neuer EK ${p.sku} ${x.format}`} /></td>
+              <td class="num">{v ? euro(v.betrag) : "–"}{allg(v)}</td>
+              <td><Zahl wert={n.vk ?? null} setze={(y) => setNeu({ ...neu, [x.k]: { ...n, vk: y } })} aria-label={`Neuer VK ${p.sku} ${x.format}`} /></td>
               <td class="num">{ee && vv ? `${((vv / ee - 1) * 100).toFixed(0)} %` : "–"}</td>
             </tr>;
           })}</tbody>
         </table>
       </div>
       <Seiten seite={seite} setSeite={setSeite} gesamt={sortiert.length} proSeite={50} />
+      <p class="muted klein" style={{ padding: "0 16px 12px" }}>„allg.“ = für dieses Format gilt noch der allgemeine Preis des Produkts. Ein hier eingetragener Preis gilt nur für das Format der Zeile.</p>
     </Karte>
   </>;
 }

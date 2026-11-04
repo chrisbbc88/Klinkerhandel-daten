@@ -1,7 +1,7 @@
 // Laufende Prüfung der Daten. Wird bei jeder Anzeige neu berechnet, damit ein erledigter
 // Punkt sofort verschwindet. Ergänzt die Hinweise aus der Übernahme (modell.ts → hinweise).
 import { aktuellerPreis, type Daten, type Produkt, type Stein } from "./modell.ts";
-import { steinFormate } from "./formate.ts";
+import { steinFormate, formatText, aehnlicheTexte } from "./formate.ts";
 
 export interface Pruefpunkt { regel: string; schwere: "pflicht" | "empfohlen"; text: string }
 
@@ -19,6 +19,8 @@ export const REGELN: Record<string, { text: string; schwere: "pflicht" | "empfoh
   alt: { text: "Bilder ohne Alt-Text", schwere: "empfohlen", gilt: "produkt" },
   text: { text: "Keine Produktbeschreibung", schwere: "empfohlen", gilt: "produkt" },
   vk: { text: "Kein Verkaufspreis je m²", schwere: "empfohlen", gilt: "produkt" },
+  textformat: { text: "Text je Format fehlt", schwere: "empfohlen", gilt: "produkt" },
+  textdoppelt: { text: "Texte zu ähnlich (doppelter Inhalt)", schwere: "empfohlen", gilt: "produkt" },
 };
 
 /**
@@ -43,16 +45,28 @@ export function pruefeStein(s: Stein, d: Pick<Daten, "formate" | "einstellungen"
 
 export function pruefeProdukt(p: Produkt, d: Pick<Daten, "bilder" | "steine">, bildIndex?: Map<number, { alt: string }>): Pruefpunkt[] {
   if (p.status === "archiviert") return [];
-  const r: string[] = [];
-  if (!p.sku) r.push("sku");
-  if (p.art !== "nistklinker" && !p.formate.length) r.push("format");
-  if (!p.bilder.length) r.push("bild");
-  else if (p.bilder.length < 3) r.push("bilder3");
+  const r: Pruefpunkt[] = [];
+  const add = (k: string, zusatz = "") => r.push({ regel: k, schwere: REGELN[k].schwere, text: REGELN[k].text + zusatz });
+  if (!p.sku) add("sku");
+  if (p.art !== "nistklinker" && !p.formate.length) add("format");
+  if (!p.bilder.length) add("bild");
+  else if (p.bilder.length < 3) add("bilder3");
   const idx = bildIndex ?? new Map(d.bilder.map((b) => [b.id, b]));
-  if (p.bilder.some((id) => !idx.get(id)?.alt)) r.push("alt");
-  if (!p.beschreibung.trim()) r.push("text");
-  if (p.art !== "nistklinker" && !aktuellerPreis(p, "vk", "m2")) r.push("vk");
-  return r.map((k) => ({ regel: k, schwere: REGELN[k].schwere, text: REGELN[k].text }));
+  if (p.bilder.some((id) => !idx.get(id)?.alt)) add("alt");
+  if (!p.beschreibung.trim()) add("text");
+  if (p.art !== "nistklinker") {
+    // Jedes angebotene Format braucht einen VK (eigener Formatpreis oder allgemeiner Preis)
+    const ohne = p.formate.length > 1 ? p.formate.filter((f) => !aktuellerPreis(p, "vk", "m2", undefined, f)) : [];
+    if (!aktuellerPreis(p, "vk", "m2")) add("vk");
+    else if (ohne.length) add("vk", `: ${ohne.join(", ")}`);
+  }
+  if (p.formate.length > 1) {
+    const ohneText = p.formate.filter((f) => !formatText(p, f).beschreibung.trim());
+    if (ohneText.length) add("textformat", `: ${ohneText.join(", ")}`);
+    const doppelt = aehnlicheTexte(p);
+    if (doppelt.length) add("textdoppelt", `: ${doppelt.map((x) => `${x.a}/${x.b} ${Math.round(x.wert * 100)} %`).join(", ")}`);
+  }
+  return r;
 }
 
 export interface ProduktBewertung { punkte: Pruefpunkt[]; score: number }
@@ -61,7 +75,8 @@ export interface ProduktBewertung { punkte: Pruefpunkt[]; score: number }
 export function bewerte(p: Produkt, d: Daten, idx: { steine: Map<number, Stein>; bilder: Map<number, { alt: string }>; jeStein?: Map<number, Produkt[]> }): ProduktBewertung {
   const s = p.stein_id ? idx.steine.get(p.stein_id) : undefined;
   const punkte = [...(s ? pruefeStein(s, d, idx.jeStein?.get(s.id)) : []), ...pruefeProdukt(p, d, idx.bilder)];
-  const regeln = Object.entries(REGELN).filter(([k, v]) => (v.gilt === "produkt" || s) && !(p.art === "nistklinker" && (k === "format" || k === "vk")));
+  const regeln = Object.entries(REGELN).filter(([k, v]) => (v.gilt === "produkt" || s) && !(p.art === "nistklinker" && (k === "format" || k === "vk"))
+    && !(p.formate.length < 2 && (k === "textformat" || k === "textdoppelt")));
   const gesamt = regeln.reduce((a, [, v]) => a + (v.schwere === "pflicht" ? 2 : 1), 0);
   const fehlt = punkte.reduce((a, x) => a + (x.schwere === "pflicht" ? 2 : 1), 0);
   return { punkte, score: Math.max(0, Math.round((1 - fehlt / gesamt) * 100)) };

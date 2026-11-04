@@ -36,6 +36,9 @@ export interface Stein extends Basis {
   datenblaetter: DatenblattRef[];
 }
 
+/** Texte eines Produkts für ein Format. */
+export interface FormatText { format: string; kurztext: string; beschreibung: string }
+
 /** Werte eines Steins in einem Format. null = nicht eingetragen (Maße: Normmaß, Bedarf: berechnet). */
 export interface SteinFormat {
   format: string;
@@ -59,6 +62,8 @@ export interface Produkt extends Basis {
   status: ProduktStatus; formate: string[]; bilder: number[];
   riemchen_staerke_mm: number | null; eckriemchen: boolean | null;
   kurztext: string; beschreibung: string; kurztext_shop_alt: string;
+  /** Kurztext und Beschreibung je Format (gegen doppelte Inhalte); leer = allgemeiner Text des Produkts */
+  format_texte: FormatText[];
   preise: Preis[];
   /** standard = Einstellung des Herstellers übernehmen */
   hersteller_im_shop: HerstellerImShop;
@@ -213,7 +218,7 @@ export function datenAusPlan(plan: Plan, jetzt: string, von: string): Daten {
     ...basis(i + 1), stein_id: p.stein ? sId.get(p.stein) ?? null : null, art: p.art, sku: p.sku, name: p.name,
     hersteller_id: p.hersteller ? hId.get(p.hersteller) ?? null : null, woo_id: p.woo_id, woo_slug: p.woo_slug,
     status: p.sku ? "freigegeben" : "entwurf", formate: [...p.formate], bilder: p.bilder.map((b) => bId.get(b.woo_media_id)!),
-    riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: p.kurztext_shop_alt,
+    riemchen_staerke_mm: null, eckriemchen: null, kurztext: "", beschreibung: "", kurztext_shop_alt: p.kurztext_shop_alt, format_texte: [],
     preise: [], hersteller_im_shop: "standard", zuletzt_exportiert_version: 1,
   }));
   const referenzen: Referenz[] = plan.referenzen.map((r, i) => ({
@@ -331,7 +336,7 @@ export function normalisieren(d: Daten): Daten {
   d.geloescht ??= [];
   d.einstellungen = { ...structuredClone(STANDARD_EINSTELLUNGEN), ...d.einstellungen, ki: { ...STANDARD_EINSTELLUNGEN.ki, ...(d.einstellungen?.ki ?? {}) } };
   for (const h of d.hersteller) h.im_shop_anzeigen ??= true;
-  for (const p of d.produkte) p.hersteller_im_shop ??= "standard";
+  for (const p of d.produkte) { p.hersteller_im_shop ??= "standard"; p.format_texte ??= []; }
   d.einstellungen.fracht ??= structuredClone(STANDARD_EINSTELLUNGEN.fracht);
   d.einstellungen.preise ??= structuredClone(STANDARD_EINSTELLUNGEN.preise);
   d.einstellungen.fugen ??= structuredClone(STANDARD_EINSTELLUNGEN.fugen);
