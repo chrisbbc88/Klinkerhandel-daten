@@ -2,6 +2,7 @@
 // Die Browser-Version veröffentlicht nicht selbst (der API-Schlüssel darf nicht in eine öffentliche Seite).
 import { HERSTELLUNG, ART, herstellerSichtbar, type Daten, type Produkt, type Referenz } from "./modell.ts";
 import { protokolliere } from "./aendern.ts";
+import { formatWerte } from "./formate.ts";
 
 export const BILD_BASIS = "https://www.klinkerhandel.de/wp-content/uploads/";
 export const bildUrl = (datei: string) => (/^(https?:|data:|blob:)/.test(datei) ? datei : BILD_BASIS + datei);
@@ -42,7 +43,7 @@ export function wooPaket(d: Daten, kandidaten: ExportKandidat[], von: string, je
   const bildListe = (ids: number[]) => ids.map((id, i) => { const b = bilder.get(id); return b ? { media_id: b.woo_media_id, datei: b.datei, alt: b.alt, rolle: i === 0 ? "hauptbild" : "galerie" } : null; }).filter(Boolean);
   const produkteZuStein = (sid: number | null) => d.produkte.filter((p) => sid && p.stein_id === sid && p.status !== "archiviert");
   return {
-    format: "klinkerhandel-woo-paket", version: 2, erstellt_am: jetzt, von, anzahl: kandidaten.length + referenzen.length,
+    format: "klinkerhandel-woo-paket", version: 3, erstellt_am: jetzt, von, anzahl: kandidaten.length + referenzen.length,
     hinweise: [
       "Preise werden nicht übertragen (Shop im Katalogmodus). Neue Produkte und Referenzen werden als Entwurf angelegt.",
       "hersteller_anzeigen = false: Herstellerkategorie und Marke am Produkt entfernen; der Hersteller wird bewusst nicht mitgeliefert.",
@@ -61,11 +62,18 @@ export function wooPaket(d: Daten, kandidaten: ExportKandidat[], von: string, je
           hersteller_anzeigen: sichtbar, hersteller: sichtbar ? h?.name ?? null : null,
           herstellungsart: s?.herstellungsart ? HERSTELLUNG[s.herstellungsart] : null,
           farben: s?.farben ?? [], formate: p.formate, oberflaechen: s?.oberflaechen ?? [],
-          technik: s ? {
-            laenge_mm: s.laenge_mm, breite_mm: s.breite_mm, hoehe_mm: s.hoehe_mm, gewicht_kg: s.gewicht_kg,
-            druckfestigkeit_nmm2: s.druckfestigkeit_nmm2, wasseraufnahme_proz: s.wasseraufnahme_proz, frostwiderstand: s.frostwiderstand,
-            bedarf_stk_m2: s.bedarf_stk_m2, riemchen_staerke_mm: p.riemchen_staerke_mm, eckriemchen: p.eckriemchen,
-          } : null,
+          technik: { riemchen_staerke_mm: p.riemchen_staerke_mm, eckriemchen: p.eckriemchen },
+          // Je Format: Maße (bei Riemchen Stärke statt Breite), Technik, Bedarf. Grundlage für Varianten im Shop.
+          varianten: p.formate.map((f) => {
+            const w = formatWerte(d, s, f);
+            return {
+              format: f, format_name: w.name,
+              laenge_mm: w.laenge_mm, breite_mm: p.art === "riemchen" ? p.riemchen_staerke_mm : w.breite_mm, hoehe_mm: w.hoehe_mm,
+              masse_normmass: w.masse_quelle !== null && w.masse_quelle !== "eingetragen",
+              gewicht_kg: p.art === "riemchen" ? null : w.gewicht_kg, druckfestigkeit_nmm2: w.druckfestigkeit_nmm2,
+              wasseraufnahme_proz: w.wasseraufnahme_proz, frostwiderstand: w.frostwiderstand, bedarf_stk_m2: w.bedarf_stk_m2,
+            };
+          }),
           kurztext: p.kurztext, beschreibung: p.beschreibung, bilder: bildListe(p.bilder),
         };
       }),

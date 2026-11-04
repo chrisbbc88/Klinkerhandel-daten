@@ -232,9 +232,24 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}
 .r-vorlagen{grid-template-columns:230px minmax(0,1fr) 270px}
 .r-ki{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)}
 .formular.zwei{grid-template-columns:1fr 1fr}
+.formular.vier{grid-template-columns:repeat(4,minmax(0,1fr))}
+.formular.vier .zwei-spalten{grid-column:span 2}
+.formatliste{display:grid;gap:12px}
+.formatblock{border:1px solid var(--line);border-radius:6px;padding:10px 12px 12px;display:grid;gap:10px}
+.formatblock header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.formatblock header b{font-size:15px;color:var(--ink)}
+.formatblock{min-width:0;grid-template-columns:minmax(0,1fr)}
+.formatblock>*{min-width:0}
+.formatliste{grid-template-columns:minmax(0,1fr)}
+.formatblock .formatmass{margin-left:auto;display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;font-variant-numeric:tabular-nums;min-width:0}
+.formatblock .knopfreihe:empty{display:none}
+.btn.umbruch{white-space:normal;text-align:left;height:auto}
+.mass-eingabe{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.mass-eingabe input{padding:4px 6px;text-align:right}
 .r-zwei-schmal{grid-template-columns:minmax(0,1fr) 220px}
  .t.pos{min-width:780px}
 .t.pos td:first-child{min-width:190px}
+.t.pos select.pos-format{width:auto;min-width:0;margin-left:6px;padding:2px 6px;font-size:12px;height:auto}
 .karte-kopf{flex-wrap:wrap}
 .nur-mobil{display:none!important}
 .platzhalter{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:12px}
@@ -277,6 +292,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}
   .filterleiste input[type=search]{width:100%}
   .formular .halb{grid-column:auto}
 }
+@media (max-width:860px){.formular.vier{grid-template-columns:repeat(2,minmax(0,1fr))}.formatblock .formatmass{margin-left:0;flex-basis:100%}}
 @media (max-width:600px){
   .formular.zwei{grid-template-columns:1fr}
   .angebot-blatt{padding:18px 14px;font-size:12px}

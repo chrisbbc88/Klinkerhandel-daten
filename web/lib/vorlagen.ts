@@ -73,9 +73,9 @@ export function vorlageFuellen(vl: Vorlage, d: Daten, v: Vorgang, k: Kontakt | u
     anrede, vorname: k?.vorname ?? "", nachname: k?.nachname ?? "",
     kunde: [[k?.vorname, k?.nachname].filter(Boolean).join(" "), k?.firma].filter(Boolean).join(" · "),
     nummer: v.nummer, betreff: v.betreff, betreff_satz: v.betreff ? ` (${v.betreff})` : "", betreff_strich: v.betreff ? ` – ${v.betreff}` : "",
-    positionen: v.positionen.map((p) => `- ${p.sku ? p.sku + " " : ""}${p.bezeichnung.replace(/^.*? – (HBR [^–]+) – /, "")}: ${zahl(p.menge_m2)} m² × ${euro(p.ep_netto_m2)}${p.rabatt_proz ? ` − ${zahl(p.rabatt_proz)} %` : ""} = ${euro(positionNetto(p))}`).join("\n")
+    positionen: v.positionen.map((p) => `- ${p.sku ? p.sku + " " : ""}${p.bezeichnung.replace(/^.*? – (HBR [^–]+) – /, "")}${p.format ? `, Format ${p.format}` : ""}: ${zahl(p.menge_m2)} m² × ${euro(p.ep_netto_m2)}${p.rabatt_proz ? ` − ${zahl(p.rabatt_proz)} %` : ""} = ${euro(positionNetto(p))}`).join("\n")
       + (v.fracht_netto ? `\n- Fracht: ${euro(v.fracht_netto)}` : "") + (v.mindermenge_netto ? `\n- Mindermengenzuschlag: ${euro(v.mindermenge_netto)}` : ""),
-    positionen_stueck: v.positionen.map((p) => `- ${p.sku || p.bezeichnung}: ${zahl(p.menge_m2)} m²${p.menge_stk ? ` = ca. ${zahl(p.menge_stk, 0)} Stück` : ""}`).join("\n"),
+    positionen_stueck: v.positionen.map((p) => `- ${p.sku || p.bezeichnung}${p.format ? ` ${p.format}` : ""}: ${zahl(p.menge_m2)} m²${p.menge_stk ? ` = ca. ${zahl(p.menge_stk, 0)} Stück` : ""}`).join("\n"),
     summe_netto: euro(s.netto), summe_brutto: euro(s.brutto), gueltig_bis: gueltig, lieferadresse,
     wunschtermin: v.wunschtermin || "nach Absprache", wunschtermin_satz: v.wunschtermin ? `, Wunschtermin ${v.wunschtermin}` : "",
     fehlende_angaben: fehlend.length ? fehlend.join("\n") : "- [bitte ergänzen]",

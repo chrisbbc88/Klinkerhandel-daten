@@ -11,7 +11,9 @@ import { STANDARD_VORLAGEN, PLATZHALTER, alleVorlagen } from "../lib/vorlagen.ts
 import type { Vorlage } from "../lib/modell.ts";
 import { SicherungSeite } from "./sicherung.tsx";
 import { kontaktLeer, type Einstellungen as E } from "../lib/modell.ts";
-import { aendere, lege_an, neueId } from "../lib/aendern.ts";
+import { aendere, lege_an, neueId, protokolliere } from "../lib/aendern.ts";
+import { FORMAT_NORM, MASS_QUELLE, bedarfBerechnen } from "../lib/formate.ts";
+import type { Format } from "../lib/modell.ts";
 import type { Bestand } from "../../src/import/bestand.ts";
 
 declare const __VERSION__: string;
@@ -154,10 +156,7 @@ function Stammdaten() {
         <p class="muted" style={{ marginTop: 0 }}>Diese HBR-Präfixe kommen im Bestand vor, sind aber keinem Hersteller zugeordnet. Präfix links beim richtigen Hersteller eintragen oder einen neuen Hersteller anlegen.</p>
         <div class="chips">{offen.map((p) => <span class="chip mono">{p} · {d.steine.filter((s) => s.hbr_code.slice(4, 6) === p).length} Steine</span>)}</div>
       </Karte>}
-      <Karte titel="Formate (Normmaße)" ohnePadding>
-        <table class="t"><thead><tr><th>Kürzel</th><th>Name</th><th>Maße mm</th></tr></thead>
-          <tbody>{d.formate.map((f) => <tr><td class="mono">{f.kuerzel}</td><td>{f.name}</td><td class="mono">{f.mm ? f.mm.join(" × ") : "–"}</td></tr>)}</tbody></table>
-      </Karte>
+      <FormateStamm />
       <Karte titel="Farben"><p class="muted" style={{ marginTop: 0 }}>Entsprechen den Farbkategorien im Shop.</p><div class="chips">{d.farben.map((f) => <span class="chip">{f.schluessel}</span>)}</div></Karte>
     </div>
   </div>;
@@ -329,4 +328,76 @@ function Vorlagen() {
       <ul class="platzhalter">{PLATZHALTER.map(([k, t]) => <li><code>{k}</code><span>{t}</span></li>)}</ul>
     </Karte>
   </div>;
+}
+
+/** Formate mit Normmaßen und Fugen für die Bedarfsberechnung. */
+function FormateStamm() {
+  const d = z.daten;
+  const [fugen, setFugen] = useState(d.einstellungen.fugen);
+  const [neu, setNeu] = useState({ kuerzel: "", name: "" });
+  const fugenGeaendert = fugen.stoss_mm !== d.einstellungen.fugen.stoss_mm || fugen.lager_mm !== d.einstellungen.fugen.lager_mm;
+  function fugenSpeichern() {
+    if (!(fugen.stoss_mm >= 0 && fugen.stoss_mm <= 30 && fugen.lager_mm >= 0 && fugen.lager_mm <= 30)) { melde("Fugen bitte zwischen 0 und 30 mm angeben.", "fehler"); return; }
+    aendern((dd, von) => {
+      protokolliere(dd, { zeit: new Date().toISOString(), von, tabelle: "einstellungen", id: "fugen", aktion: "aendern", felder: { fugen: [dd.einstellungen.fugen, fugen] } });
+      dd.einstellungen.fugen = { ...fugen };
+    }, "Fugen gespeichert. Der berechnete Bedarf je m² gilt ab sofort mit den neuen Werten.");
+  }
+  function anlegen() {
+    const k = neu.kuerzel.trim(), n = neu.name.trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,9}$/.test(k)) { melde("Kürzel: 1–10 Zeichen, Buchstaben, Ziffern oder Bindestrich.", "fehler"); return; }
+    if (d.formate.some((f) => f.kuerzel.toLowerCase() === k.toLowerCase())) { melde(`Das Format ${k} gibt es schon.`, "fehler"); return; }
+    aendern((dd, von) => {
+      dd.formate.push({ kuerzel: k, name: n || k, mm: null, mm_art: null, woo_kategorie_id: null });
+      protokolliere(dd, { zeit: new Date().toISOString(), von, tabelle: "formate", id: k, aktion: "anlegen", felder: null, text: `Format ${k} ${n}` });
+    }, `Format ${k} angelegt. Maße bitte ergänzen.`);
+    setNeu({ kuerzel: "", name: "" });
+  }
+  const f = d.einstellungen.fugen;
+  return <Karte titel="Formate und Normmaße" ohnePadding rechts={<span class="muted klein">gelten für alle Steine, solange am Stein nichts Abweichendes eingetragen ist</span>}>
+    <div class="tabelle-wrap"><table class="t">
+      <thead><tr><th>Kürzel</th><th>Name</th><th style={{ width: 230 }}>Länge × Breite × Höhe mm</th><th>Herkunft</th><th class="num" title={`Stoßfuge ${f.stoss_mm} mm, Lagerfuge ${f.lager_mm} mm`}>Stk/m²</th><th></th></tr></thead>
+      <tbody>{d.formate.map((x) => <FormatZeile f={x} />)}</tbody>
+    </table></div>
+    <div class="formular" style={{ padding: "12px 16px", borderTop: "1px solid var(--line)" }}>
+      <Feld label="Stoßfuge mm" hinweis="senkrechte Fuge"><Zahl wert={fugen.stoss_mm} setze={(v) => setFugen({ ...fugen, stoss_mm: v ?? 0 })} /></Feld>
+      <Feld label="Lagerfuge mm" hinweis="waagerechte Fuge"><Zahl wert={fugen.lager_mm} setze={(v) => setFugen({ ...fugen, lager_mm: v ?? 0 })} /></Feld>
+      <div class="breit knopfreihe"><button class="btn klein" disabled={!fugenGeaendert || z.nurLesen} onClick={fugenSpeichern}>Fugen speichern</button>
+        <span class="muted klein">Bedarf je m² = 1 m² ÷ ((Länge + Stoßfuge) × (Höhe + Lagerfuge)), gerundet. Am Stein eingetragene Werte haben Vorrang.</span></div>
+      <Feld label="Neues Format: Kürzel"><Text wert={neu.kuerzel} setze={(v) => setNeu({ ...neu, kuerzel: v })} placeholder="z. B. OF" /></Feld>
+      <Feld label="Name"><Text wert={neu.name} setze={(v) => setNeu({ ...neu, name: v })} placeholder="z. B. Oldenburger Format" /></Feld>
+      <div class="breit"><button class="btn klein" disabled={!neu.kuerzel.trim() || z.nurLesen} onClick={anlegen}><Icon n="plus" />Format anlegen</button></div>
+    </div>
+  </Karte>;
+}
+
+function FormatZeile({ f }: { f: Format }) {
+  const d = z.daten;
+  const [mm, setMm] = useState<(number | null)[]>(f.mm ? [...f.mm] : [null, null, null]);
+  const norm = FORMAT_NORM[f.kuerzel];
+  const geaendert = JSON.stringify(mm) !== JSON.stringify(f.mm ?? [null, null, null]);
+  const vollstaendig = mm.every((x) => x && x > 0);
+  const leer = mm.every((x) => x == null);
+  function speichern(neuMm: [number, number, number] | null, art: Format["mm_art"]) {
+    aendern((dd, von) => {
+      const x = dd.formate.find((y) => y.kuerzel === f.kuerzel)!;
+      protokolliere(dd, { zeit: new Date().toISOString(), von, tabelle: "formate", id: f.kuerzel, aktion: "aendern", felder: { mm: [x.mm, neuMm] } });
+      x.mm = neuMm; x.mm_art = art;
+    }, `Maße für ${f.kuerzel} gespeichert.`);
+    setMm(neuMm ? [...neuMm] : [null, null, null]);
+  }
+  const art = f.mm_art ?? null;
+  const istNorm = norm?.mm && f.mm && norm.mm.join() === f.mm.join();
+  const bedarf = f.mm ? bedarfBerechnen(f.mm[0], f.mm[2], d.einstellungen.fugen) : null;
+  return <tr>
+    <td class="mono">{f.kuerzel}</td>
+    <td>{f.name}</td>
+    <td><div class="mass-eingabe">{[0, 1, 2].map((i) => <Zahl wert={mm[i]} disabled={z.nurLesen} aria-label={`${f.kuerzel} ${["Länge", "Breite", "Höhe"][i]}`} setze={(v) => { const n = [...mm]; n[i] = v; setMm(n); }} />)}</div></td>
+    <td>{f.mm ? <span class={`marke ${art === "norm" ? "ok" : "info"}`}>{MASS_QUELLE[art === "norm" || art === "ueblich" ? art : "festgelegt"]}</span> : <span class="faint klein">herstellerabhängig – Maße am Stein eintragen</span>}</td>
+    <td class="num">{bedarf ?? "–"}</td>
+    <td class="nowrap">
+      {geaendert && <button class="btn klein primaer" disabled={!vollstaendig && !leer} onClick={() => speichern(leer ? null : (mm as [number, number, number]), leer ? null : norm?.mm && norm.mm.join() === mm.join() ? norm.art : "festgelegt")}>Speichern</button>}
+      {!geaendert && norm?.mm && !istNorm && <button class="btn klein link" onClick={() => speichern([...norm.mm!] as [number, number, number], norm.art)}>Normmaß {norm.mm.join("×")}</button>}
+    </td>
+  </tr>;
 }

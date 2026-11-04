@@ -3,6 +3,19 @@
 Die Versionsnummer steht unten rechts auf jeder Seite der Testversion (Klick öffnet Einstellungen › Über das ERP).
 Jede ausgelieferte `index.html` erhält eine neue Nummer (`package.json` → `version`, dann `npm run build:web`).
 
+## v0.6.0 – 03.11.2026
+- **Formate als Varianten eines Steins:** Maße, Druckfestigkeit, Wasseraufnahme, Frost, Gewicht, Bedarf je m² und Hersteller-Artikelnummer werden je Format (NF, DF, WF …) geführt statt einmal je Stein. Verblender und Riemchen teilen sich diese Werte; welche Formate ein Produkt anbietet, wird weiterhin am Produkt gewählt.
+- **Normmaße automatisch:** DF 240×115×52, NF 240×115×71, 2DF 240×115×113, WF 210×100×50, WDF 210×100×65, RF 250×120×65 als Normmaß; LDF 290×90×52 und XLDF 365×115×52 als übliche (herstellerabhängige) Maße. Leere Maßfelder zeigen das Normmaß; eingetragen wird nur, was laut Datenblatt abweicht. Formate ohne einheitliches Maß (LF, ModF, Modul, BDF, BDF-XL, BS) können in den Stammdaten festgelegt werden; neue Formate lassen sich anlegen.
+- **Bedarf je m² berechnet** aus Länge, Höhe und Fugen (Standard Stoßfuge 10 mm, Lagerfuge 12 mm, einstellbar unter Stammdaten): NF 48, DF 63, WF 73, WDF 59, 2DF 32 Stück. Ein eingetragener Wert hat Vorrang.
+- Prüfung je angebotenem Format („Frost, Druckfestigkeit oder Wasseraufnahme fehlen: NF, DF“); Knopf „Prüfwerte auf alle Formate übertragen“.
+- Datenblatt (KI): liest Werte je Format aus; Format über Bezeichnung oder Maße erkannt; Normmaße gelten als „stimmt“ und werden nicht doppelt gespeichert. Ohne KI: Format aus den Maßen erkannt oder auswählbar.
+- Preise optional je Format (z. B. DF teurer als NF); ohne Formatpreis gilt der allgemeine Preis.
+- Angebote: Format je Position (bestimmt Stückzahl und Preis), schon bei der neuen Anfrage wählbar und aus E-Mail-Anfragen übernommen; Versand erst, wenn bei Produkten mit mehreren Formaten eins gewählt ist. Druckansicht und E-Mail-Vorlagen nennen das Format mit Maßen.
+- Neue CSV „Formate und Technik“ (eine Zeile je Stein und Format) unter Import & Export; die Technikspalten der Produkt-CSV entfallen dafür.
+- Shop-Paket Version 3: je Produkt `varianten` mit Maßen und Technik je Format (Grundlage für Varianten im Shop).
+- Ältere Sicherungen werden beim Einlesen automatisch umgestellt: Steinwerte gehen an das Format, zu dem die Maße passen, oder an das einzige Format; sonst an alle Formate mit dem Vermerk „aus alten Steindaten – prüfen“.
+- Server-Version: Migration `0002_stein_format.sql` (neue Tabelle `stein_format`, Preise je Format, Fugen-Einstellung; alte Spalten bleiben erhalten).
+
 ## v0.5.1 – 02.11.2026
 - Platzhalter-Liste der E-Mail-Vorlagen bricht sauber um und bleibt in der Karte; Vorlagen-Seite ordnet sich bei schmalen Fenstern neu an.
 - Mobilansicht überarbeitet (alle Seiten bei 390 px geprüft): keine Seite läuft mehr seitlich aus dem Bildschirm; Reiter brechen um; Pipeline-Spalten untereinander; Tabellen scrollen innerhalb ihrer Karte; im Bestand und in der Kontaktliste nur die wichtigsten Spalten; Positionen im Angebot seitlich scrollbar mit lesbarer Artikelspalte; Vorlagenauswahl im E-Mail-Dialog als Auswahlliste; Angebotsdruck auf dem Handy lesbar; Versionsanzeige und Meldungen platzsparend.

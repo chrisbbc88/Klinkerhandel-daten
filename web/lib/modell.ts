@@ -1,9 +1,10 @@
 // Datenmodell der Browser-Version. Entspricht den Tabellen in db/migrations/0001_grundschema.sql,
 // damit Sicherungen später ohne Umbau in die Server-Version übernommen werden können.
 import { planen, FORMATE, type Bestand, type Plan } from "../../src/import/bestand.ts";
+import { formateNormalisieren, steinFormatLeer, formatAusMassen } from "./formate.ts";
 
 export const FORMAT_KENNUNG = "klinkerhandel-erp";
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type Herstellungsart = "handform" | "strangpress" | "wasserstrich";
 export type ProduktArt = "verblender" | "riemchen" | "daemmklinker" | "nistklinker";
@@ -15,7 +16,8 @@ export interface Basis { id: number; version: number; erstellt_am: string; geaen
 export interface Hersteller { id: number; name: string; hbr_praefix: string | null; woo_kategorie_id: number | null; im_shop_anzeigen: boolean; sichtbarkeit_geaendert_am?: string; geaendert_am?: string }
 export type HerstellerImShop = "standard" | "anzeigen" | "ausblenden";
 export interface Farbe { schluessel: string; woo_kategorie_id: number | null }
-export interface Format { kuerzel: string; name: string; mm: [number, number, number] | null; woo_kategorie_id: number | null }
+/** mm_art: Herkunft des Maßes – norm (feste Formatbezeichnung), ueblich (herstellerabhängig), festgelegt (vom Klinkerhandel eingetragen) */
+export interface Format { kuerzel: string; name: string; mm: [number, number, number] | null; mm_art?: "norm" | "ueblich" | "festgelegt" | null; woo_kategorie_id: number | null }
 
 export interface DatenblattRef { dateiname: string; sha256: string; geprueft_am: string; geprueft_von: string; felder: string[] }
 
@@ -27,17 +29,28 @@ export interface Stein extends Basis {
   farben: string[];
   bezeichnung_hersteller: string; artikelnr_hersteller: string;
   oberflaechen: string[];
-  laenge_mm: number | null; breite_mm: number | null; hoehe_mm: number | null;
-  gewicht_kg: number | null; druckfestigkeit_nmm2: number | null; wasseraufnahme_proz: number | null;
-  frostwiderstand: "F0" | "F1" | "F2" | null; bedarf_stk_m2: number | null;
+  /** Werte je Format (NF, DF …). Nur eingetragene Werte; fehlende Maße kommen aus den Normmaßen (formate.ts). */
+  format_daten: SteinFormat[];
   herstellertext: string; notiz: string;
   status: "aktiv" | "auslauf" | "archiviert";
   datenblaetter: DatenblattRef[];
 }
 
+/** Werte eines Steins in einem Format. null = nicht eingetragen (Maße: Normmaß, Bedarf: berechnet). */
+export interface SteinFormat {
+  format: string;
+  laenge_mm: number | null; breite_mm: number | null; hoehe_mm: number | null;
+  gewicht_kg: number | null; druckfestigkeit_nmm2: number | null; wasseraufnahme_proz: number | null;
+  frostwiderstand: "F0" | "F1" | "F2" | null; bedarf_stk_m2: number | null;
+  artikelnr_hersteller: string;
+  quelle: "manuell" | "datenblatt" | "alt" | null;
+}
+
 export interface Preis {
   id: number; preisart: "ek" | "vk"; betrag: number; einheit: "m2" | "stk" | "pal";
   gueltig_ab: string; quelle: "lieferant" | "manuell"; erfasst_von: string; erfasst_am: string;
+  /** Preis gilt nur für dieses Format; leer = für alle Formate des Produkts */
+  format?: string | null;
 }
 
 export interface Produkt extends Basis {
@@ -81,6 +94,8 @@ export interface Kontakt extends Basis {
 export type VorgangStatus = "neu" | "in_bearbeitung" | "angebot_erstellt" | "gesendet" | "angenommen" | "abgelehnt" | "archiviert";
 export interface Position {
   produkt_id: number | null; sku: string; bezeichnung: string;
+  /** Format der Position (NF, DF …); bestimmt Bedarf je m² und ggf. den Preis */
+  format?: string;
   flaeche_m2: number; verschnitt_proz: number; bedarf_stk_m2: number | null;
   menge_m2: number; menge_stk: number | null; ep_netto_m2: number; rabatt_proz: number;
   /** true = Rabatt von Hand gesetzt, Staffel wird nicht mehr automatisch angewendet */
@@ -115,6 +130,8 @@ export interface Einstellungen {
   fracht: { zonen: { name: string; plz: string; betrag: number; frei_ab_m2: number | null }[]; sonst_betrag: number | null };
   preise: { staffeln: { ab_m2: number; rabatt_proz: number }[]; mindermenge: { unter_m2: number | null; betrag: number }; vier_augen_ab: number | null };
   vorlagen: Vorlage[];
+  /** Fugen für die Berechnung des Bedarfs je m² */
+  fugen: { stoss_mm: number; lager_mm: number };
 }
 
 export interface Daten {
@@ -169,10 +186,10 @@ export const STANDARD_EINSTELLUNGEN: Einstellungen = {
   ], sonst_betrag: null },
   preise: { staffeln: [{ ab_m2: 100, rabatt_proz: 2 }, { ab_m2: 250, rabatt_proz: 4 }], mindermenge: { unter_m2: 20, betrag: 45 }, vier_augen_ab: 5000 },
   vorlagen: [],
+  fugen: { stoss_mm: 10, lager_mm: 12 },
 };
 
-const leer = { bezeichnung_hersteller: "", artikelnr_hersteller: "", oberflaechen: [] as string[], laenge_mm: null, breite_mm: null, hoehe_mm: null,
-  gewicht_kg: null, druckfestigkeit_nmm2: null, wasseraufnahme_proz: null, frostwiderstand: null, bedarf_stk_m2: null,
+const leer = { bezeichnung_hersteller: "", artikelnr_hersteller: "", oberflaechen: [] as string[], format_daten: [] as SteinFormat[],
   herstellertext: "", notiz: "", status: "aktiv" as const, datenblaetter: [] as DatenblattRef[] };
 
 /** Erstbefüllung aus einer Shop-Bestandsdatei. */
@@ -187,7 +204,7 @@ export function datenAusPlan(plan: Plan, jetzt: string, von: string): Daten {
   const bilder: Bild[] = plan.bilder.map((b, i) => ({ id: i + 1, woo_media_id: b.woo_media_id, datei: b.datei, breite_px: b.breite_px, alt: b.alt ?? "" }));
   const bId = new Map(bilder.map((b) => [b.woo_media_id, b.id]));
   const steine: Stein[] = plan.steine.map((s, i) => ({
-    ...basis(i + 1), ...leer, oberflaechen: [], datenblaetter: [],
+    ...basis(i + 1), ...leer, oberflaechen: [], format_daten: [], datenblaetter: [],
     hbr_code: s.hbr_code, hersteller_id: s.hersteller ? hId.get(s.hersteller) ?? null : null,
     hersteller_quelle: s.hersteller_quelle, herstellungsart: s.herstellungsart, farben: [...s.farben],
   }));
@@ -216,7 +233,7 @@ export function datenAusPlan(plan: Plan, jetzt: string, von: string): Daten {
   ];
   return {
     format: FORMAT_KENNUNG, schema: SCHEMA_VERSION, erstellt_am: jetzt, gespeichert_am: jetzt, shop_stand: plan.stand,
-    hersteller, farben: plan.farben.map((f) => ({ ...f })), formate: FORMATE.map((f) => ({ ...f, woo_kategorie_id: plan.formate.find((x) => x.kuerzel === f.kuerzel)?.woo_kategorie_id ?? null })),
+    hersteller, farben: plan.farben.map((f) => ({ ...f })), formate: formateNormalisieren(FORMATE.map((f) => ({ ...f, mm: f.mm ? [...f.mm] as [number, number, number] : null, woo_kategorie_id: plan.formate.find((x) => x.kuerzel === f.kuerzel)?.woo_kategorie_id ?? null }))),
     steine, produkte, bilder, referenzen, hinweise, kontakte, vorgaenge: [],
     aenderungen: [{ zeit: jetzt, von, tabelle: "system", id: 0, aktion: "anlegen", felder: null, text: `Erstübernahme aus Shop-Stand ${plan.stand ?? "unbekannt"}` }],
     geloescht: [],
@@ -234,16 +251,24 @@ export function kontaktLeer(id: number, typ: KontaktTyp, firma: string, jetzt: s
 }
 
 export function steinLeer(id: number, hbr_code: string, jetzt: string, von: string): Stein {
-  return { id, version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von, ...leer, oberflaechen: [], datenblaetter: [],
+  return { id, version: 1, erstellt_am: jetzt, geaendert_am: jetzt, geaendert_von: von, ...leer, oberflaechen: [], format_daten: [], datenblaetter: [],
     hbr_code, hersteller_id: null, hersteller_quelle: null, herstellungsart: null, farben: [] };
 }
 
-/** Aktueller Preis einer Art und Einheit zum Stichtag (jüngstes gueltig_ab ≤ Stichtag). */
-export function aktuellerPreis(p: Produkt, preisart: "ek" | "vk", einheit: "m2" | "stk" | "pal" = "m2", stichtag = heute()): Preis | null {
-  let best: Preis | null = null;
-  for (const x of p.preise)
-    if (x.preisart === preisart && x.einheit === einheit && x.gueltig_ab <= stichtag && (!best || x.gueltig_ab > best.gueltig_ab)) best = x;
-  return best;
+/**
+ * Aktueller Preis einer Art und Einheit zum Stichtag (jüngstes gueltig_ab ≤ Stichtag).
+ * format: Preise für genau dieses Format haben Vorrang vor Preisen ohne Format.
+ * Ohne format zählen Preise ohne Format; gibt es nur formatbezogene, der jüngste davon.
+ */
+export function aktuellerPreis(p: Produkt, preisart: "ek" | "vk", einheit: "m2" | "stk" | "pal" = "m2", stichtag = heute(), format?: string | null): Preis | null {
+  const juengster = (filter: (x: Preis) => boolean) => {
+    let best: Preis | null = null;
+    for (const x of p.preise)
+      if (x.preisart === preisart && x.einheit === einheit && x.gueltig_ab <= stichtag && filter(x) && (!best || x.gueltig_ab > best.gueltig_ab)) best = x;
+    return best;
+  };
+  if (format) return juengster((x) => x.format === format) ?? juengster((x) => !x.format);
+  return juengster((x) => !x.format) ?? juengster(() => true);
 }
 export function heute(d = new Date()): string {
   const z = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(d);
@@ -277,6 +302,30 @@ export function herstellerSichtbar(p: Pick<Produkt, "hersteller_im_shop" | "hers
   return hersteller ? hersteller.im_shop_anzeigen !== false : false;
 }
 
+const ALT_FELDER = ["laenge_mm", "breite_mm", "hoehe_mm", "gewicht_kg", "druckfestigkeit_nmm2", "wasseraufnahme_proz", "frostwiderstand", "bedarf_stk_m2"] as const;
+
+/**
+ * Stände bis v0.5 hatten Maße und Technik einmal je Stein. Sie werden dem passenden Format zugeordnet:
+ * Format aus den Maßen erkannt oder einziges Format des Steins. Sonst bekommen alle Formate die Werte
+ * mit Quelle „alt“ – die Oberfläche bittet dann um Prüfung je Format.
+ */
+function steinFormateMigrieren(st: Stein, d: Daten) {
+  const alt = st as unknown as Record<string, unknown>;
+  const hatte = ALT_FELDER.some((k) => k in alt);
+  st.format_daten ??= [];
+  if (!hatte) return;
+  const werte = Object.fromEntries(ALT_FELDER.map((k) => [k, alt[k] ?? null])) as Record<(typeof ALT_FELDER)[number], any>;
+  for (const k of ALT_FELDER) delete alt[k];
+  if (ALT_FELDER.every((k) => werte[k] === null)) return;
+  const formate = [...new Set(d.produkte.filter((p) => p.stein_id === st.id).flatMap((p) => p.formate))];
+  const ziel = werte.laenge_mm && werte.hoehe_mm ? formatAusMassen(d, werte.laenge_mm, werte.breite_mm, werte.hoehe_mm, formate.length ? formate : undefined) : null;
+  const ziele = ziel ? [ziel] : formate.length === 1 ? formate : formate.length ? formate : [];
+  for (const f of ziele) {
+    if (st.format_daten.some((x) => x.format === f)) continue;
+    st.format_daten.push({ ...steinFormatLeer(f), ...werte, artikelnr_hersteller: "", quelle: ziele.length > 1 ? "alt" : "manuell" });
+  }
+}
+
 /** Ergänzt Felder, die ältere Stände (Browser oder Sicherungsdatei) noch nicht haben. Ändert keine vorhandenen Werte. */
 export function normalisieren(d: Daten): Daten {
   d.geloescht ??= [];
@@ -285,6 +334,9 @@ export function normalisieren(d: Daten): Daten {
   for (const p of d.produkte) p.hersteller_im_shop ??= "standard";
   d.einstellungen.fracht ??= structuredClone(STANDARD_EINSTELLUNGEN.fracht);
   d.einstellungen.preise ??= structuredClone(STANDARD_EINSTELLUNGEN.preise);
+  d.einstellungen.fugen ??= structuredClone(STANDARD_EINSTELLUNGEN.fugen);
+  formateNormalisieren(d.formate);
+  for (const st of d.steine) steinFormateMigrieren(st, d);
   d.einstellungen.vorlagen ??= [];
   for (const v of d.vorgaenge) {
     v.mindermenge_netto ??= 0; v.mindermenge_manuell ??= false; v.freigabe ??= null;
@@ -292,6 +344,7 @@ export function normalisieren(d: Daten): Daten {
     v.statusverlauf ??= [{ status: "neu", zeit: v.erstellt_am, von: v.geaendert_von }];
   }
   for (const r of d.referenzen) { r.ort ??= ""; r.beschreibung ??= ""; r.zuletzt_exportiert_version ??= r.woo_id ? r.version : null; }
+  d.schema = SCHEMA_VERSION;
   return d;
 }
 

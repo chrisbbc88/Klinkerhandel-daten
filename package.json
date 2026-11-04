@@ -1,6 +1,6 @@
 {
   "name": "klinkerhandel-erp",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "ERP Klinkerhandel Harbecke Rhede – Produktpflege",
   "scripts": {
     "test": "node --test test/*.test.ts",

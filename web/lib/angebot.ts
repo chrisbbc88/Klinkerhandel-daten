@@ -1,5 +1,6 @@
 // Angebotsberechnung und Nummernvergabe. Ohne Browser-Abhängigkeiten.
 import { aktuellerPreis, type Daten, type Position, type Produkt, type Vorgang } from "./modell.ts";
+import { formatWerte } from "./formate.ts";
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -21,12 +22,30 @@ export function summen(v: Pick<Vorgang, "positionen" | "fracht_netto"> & { minde
   return { waren, netto, mwst, brutto: r2(netto + mwst) };
 }
 
-export function positionAusProdukt(p: Produkt, d: Daten, flaeche_m2: number): Position {
+/**
+ * Position aus einem Produkt. format: gewünschtes Format; wird nur übernommen, wenn das Produkt es führt.
+ * Ohne passendes Format und mit nur einem Format am Produkt wird dieses genommen, sonst bleibt es offen.
+ */
+export function positionAusProdukt(p: Produkt, d: Daten, flaeche_m2: number, format?: string | null): Position {
+  const f = format && p.formate.includes(format) ? format : p.formate.length === 1 ? p.formate[0] : "";
+  const basis: Position = {
+    produkt_id: p.id, sku: p.sku ?? "", bezeichnung: p.name, format: f, flaeche_m2, verschnitt_proz: d.einstellungen.angebot.verschnitt_proz,
+    bedarf_stk_m2: null, menge_m2: 0, menge_stk: null, ep_netto_m2: 0, rabatt_proz: 0,
+  };
+  return positionFormat(basis, p, d, f, true);
+}
+
+/**
+ * Setzt das Format einer Position: Bedarf je m² aus dem Format, Preis je Format.
+ * Der Preis wird nur ersetzt, wenn er bisher dem hinterlegten Preis entsprach (also nicht von Hand geändert war).
+ */
+export function positionFormat(pos: Position, p: Produkt, d: Daten, format: string, preisImmer = false): Position {
   const s = p.stein_id ? d.steine.find((x) => x.id === p.stein_id) : undefined;
-  return positionRechnen({
-    produkt_id: p.id, sku: p.sku ?? "", bezeichnung: p.name, flaeche_m2, verschnitt_proz: d.einstellungen.angebot.verschnitt_proz,
-    bedarf_stk_m2: s?.bedarf_stk_m2 ?? null, menge_m2: 0, menge_stk: null, ep_netto_m2: aktuellerPreis(p, "vk")?.betrag ?? 0, rabatt_proz: 0,
-  });
+  const bedarf = format ? formatWerte(d, s, format).bedarf_stk_m2 : null;
+  const altPreis = aktuellerPreis(p, "vk", "m2", undefined, pos.format || null)?.betrag ?? 0;
+  const neuPreis = aktuellerPreis(p, "vk", "m2", undefined, format || null)?.betrag ?? 0;
+  const ep = preisImmer || pos.ep_netto_m2 === altPreis ? neuPreis : pos.ep_netto_m2;
+  return positionRechnen({ ...pos, format, bedarf_stk_m2: bedarf, ep_netto_m2: ep });
 }
 
 /** Kürzel aus dem Bearbeiternamen (zwei Buchstaben), damit zwei Rechner keine gleiche Nummer vergeben. */

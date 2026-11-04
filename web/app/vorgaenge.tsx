@@ -8,7 +8,8 @@ import {
   type Vorgang, type VorgangStatus, type Position, type Kontakt,
 } from "../lib/modell.ts";
 import { aendere, lege_an, loesche, neueId } from "../lib/aendern.ts";
-import { positionRechnen, positionNetto, positionAusProdukt, summen, naechsteNummer, euro, zahl } from "../lib/angebot.ts";
+import { positionRechnen, positionNetto, positionAusProdukt, positionFormat, summen, naechsteNummer, euro, zahl } from "../lib/angebot.ts";
+import { formatWerte, masseText } from "../lib/formate.ts";
 import { datenqualitaet, QUALITAET_TEXT, frachtFuer, statusWechsel, freigeben, pipelineKennzahlen, anfragePlanen, anfrageAnlegen, emlText, ANFRAGE_SCHEMA, ANFRAGE_ANWEISUNG, type AnfrageRoh, type AnfragePlan, type Qualitaet } from "../lib/anfrage.ts";
 import { kiStrukturiert, KiFehler } from "../lib/ki.ts";
 import { dateiWaehlen } from "../lib/speicher.ts";
@@ -243,7 +244,7 @@ export function NeuerVorgang() {
   const produktParam = Number(queryParam("produkt")) || null;
   const [kontaktId, setKontaktId] = useState<number | null>(kontaktParam);
   const [neuK, setNeuK] = useState({ anrede: "", vorname: "", nachname: "", firma: "", email: "", telefon: "", strasse: "", plz: "", ort: "", kundentyp: "privat" as Kontakt["kundentyp"] });
-  const [v, setV] = useState({ quelle: "telefon" as Vorgang["quelle"], betreff: "", lieferort_strasse: "", lieferort_plz: "", lieferort_ort: "", wunschtermin: "", flaeche: null as number | null });
+  const [v, setV] = useState({ quelle: "telefon" as Vorgang["quelle"], betreff: "", lieferort_strasse: "", lieferort_plz: "", lieferort_ort: "", wunschtermin: "", flaeche: null as number | null, format: "" });
   const kunden = d.kontakte.filter((k) => k.typ === "kunde" || k.typ === "partner").sort((x, y) => kontaktAnzeige(x).localeCompare(kontaktAnzeige(y)));
   const produkt = produktParam ? ab().produkte.get(produktParam) : undefined;
   const q = !kontaktId ? datenqualitaet({ ...kontaktLeer(0, "kunde", "", "", ""), ...neuK }) : null;
@@ -257,7 +258,7 @@ export function NeuerVorgang() {
       let kid = kontaktId;
       if (!kid) { const k = lege_an(dd, "kontakte", { ...kontaktLeer(neueId(), "kunde", neuK.firma.trim(), jetzt, von), ...neuK, firma: neuK.firma.trim(), aktivitaeten: [] }, von); kid = k.id; }
       const k = dd.kontakte.find((x) => x.id === kid)!;
-      const pos: Position[] = produkt ? [positionAusProdukt(produkt, dd, v.flaeche ?? 0)] : [];
+      const pos: Position[] = produkt ? [positionAusProdukt(produkt, dd, v.flaeche ?? 0, v.format)] : [];
       const plz = v.lieferort_plz || k.plz;
       const fr = frachtFuer(dd, plz, pos.reduce((s, p) => s + p.menge_m2, 0));
       lege_an(dd, "vorgaenge", {
@@ -299,7 +300,8 @@ export function NeuerVorgang() {
           <Feld label="Lieferadresse Straße" klasse="halb" hinweis="leer = Adresse des Kunden"><Text wert={v.lieferort_strasse} setze={(x) => setV({ ...v, lieferort_strasse: x })} /></Feld>
           <Feld label="PLZ"><Text wert={v.lieferort_plz} setze={(x) => setV({ ...v, lieferort_plz: x })} /></Feld>
           <Feld label="Ort"><Text wert={v.lieferort_ort} setze={(x) => setV({ ...v, lieferort_ort: x })} /></Feld>
-          {produkt && <Feld label={`Fläche m² für ${produkt.sku}`} klasse="breit"><Zahl wert={v.flaeche} setze={(x) => setV({ ...v, flaeche: x })} /></Feld>}
+          {produkt && <Feld label={`Fläche m² für ${produkt.sku}`}><Zahl wert={v.flaeche} setze={(x) => setV({ ...v, flaeche: x })} /></Feld>}
+          {produkt && produkt.formate.length > 1 && <Feld label="Format"><Auswahl wert={v.format} setze={(x) => setV({ ...v, format: x })} optionen={produkt.formate.map((f) => [f, f] as [string, string])} leer="– später wählen –" /></Feld>}
         </div>
       </Karte>
     </div>
@@ -419,11 +421,16 @@ function VDetail({ v }: { v: Vorgang }) {
               <tbody>
                 {e.positionen.map((p, i) => <tr>
                   <td>{p.produkt_id ? <a class="mono" href={`#/produkte/${p.produkt_id}`}>{p.sku}</a> : <span class="marke">frei</span>}
+                    {(() => { const pr = p.produkt_id ? a.produkte.get(p.produkt_id) : undefined; if (!pr || !pr.formate.length) return null;
+                      if (pr.formate.length === 1 && p.format === pr.formate[0]) return <span class="marke" style={{ marginLeft: 6 }}>{p.format}</span>;
+                      return <select class={`pos-format ${p.format ? "" : "fehler"}`} value={p.format ?? ""} disabled={!offenBearb} aria-label="Format"
+                        onChange={(x) => setPositionen(e.positionen.map((q, j) => (j === i ? positionFormat(q, pr, d, (x.target as HTMLSelectElement).value) : q)))}>
+                        <option value="">Format wählen</option>{pr.formate.map((f) => <option value={f}>{f}</option>)}</select>; })()}
                     <input type="text" value={p.bezeichnung} disabled={!offenBearb} onInput={(x) => setPos(i, { bezeichnung: (x.target as HTMLInputElement).value })} style={{ marginTop: 3 }} aria-label="Bezeichnung" /></td>
                   <td><Zahl wert={p.flaeche_m2} disabled={!offenBearb} setze={(x) => setPos(i, { flaeche_m2: x ?? 0 })} aria-label="Fläche" /></td>
                   <td><Zahl wert={p.verschnitt_proz} disabled={!offenBearb} setze={(x) => setPos(i, { verschnitt_proz: x ?? 0 })} aria-label="Verschnitt" /></td>
                   <td class="num">{zahl(p.menge_m2)}</td>
-                  <td class="num" title={p.bedarf_stk_m2 ? `${zahl(p.bedarf_stk_m2)} Stk/m²` : "Bedarf je m² fehlt am Produkt"}>{p.menge_stk ? zahl(p.menge_stk, 0) : <span class="faint">–</span>}</td>
+                  <td class="num" title={p.bedarf_stk_m2 ? `${zahl(p.bedarf_stk_m2)} Stk/m²${p.format ? ` (${p.format})` : ""}` : p.produkt_id && !p.format ? "Format wählen – davon hängt die Stückzahl ab" : "Bedarf je m² fehlt"}>{p.menge_stk ? zahl(p.menge_stk, 0) : <span class="faint">–</span>}</td>
                   <td><Zahl wert={p.ep_netto_m2} disabled={!offenBearb} setze={(x) => setPos(i, { ep_netto_m2: x ?? 0 })} class={!p.ep_netto_m2 ? "fehler" : ""} aria-label="Einzelpreis" /></td>
                   <td title={p.rabatt_manuell ? "von Hand gesetzt" : "laut Staffel"}><Zahl wert={p.rabatt_proz} disabled={!offenBearb} setze={(x) => setPos(i, { rabatt_proz: x ?? 0, rabatt_manuell: true })} aria-label="Rabatt" />
                     {p.rabatt_manuell && offenBearb && p.produkt_id ? <button class="btn link klein" onClick={() => setPos(i, { rabatt_manuell: false })}>Staffel</button> : <span class="faint klein">{p.produkt_id && p.rabatt_proz ? "Staffel" : ""}</span>}</td>
@@ -555,6 +562,15 @@ function MailDialog({ v, onClose }: { v: Vorgang; onClose: () => void }) {
   </Dialog>;
 }
 
+/** Maße des Formats einer Position für den Ausdruck (Riemchen: Stärke statt Breite). */
+function formatMass(p: Position): string {
+  const d = z.daten;
+  const pr = p.produkt_id ? d.produkte.find((x) => x.id === p.produkt_id) : undefined;
+  if (!pr || !p.format) return "";
+  const s = pr.stein_id ? d.steine.find((x) => x.id === pr.stein_id) : undefined;
+  return masseText(formatWerte(d, s, p.format), pr.art === "riemchen" ? pr.riemchen_staerke_mm : undefined);
+}
+
 function Druck({ v }: { v: Vorgang }) {
   const d = z.daten, a = ab();
   const k = a.kontakte.get(v.kontakt_id ?? -1);
@@ -587,7 +603,7 @@ function Druck({ v }: { v: Vorgang }) {
         <thead><tr><th>Pos.</th><th>Artikel</th><th style={{ textAlign: "right" }}>Menge</th><th style={{ textAlign: "right" }}>EP netto</th><th style={{ textAlign: "right" }}>Gesamt netto</th></tr></thead>
         <tbody>{v.positionen.map((p, i) => <tr>
           <td>{i + 1}</td>
-          <td><b>{p.sku}</b> {p.bezeichnung}<div style={{ color: "#666", fontSize: 11.5 }}>{zahl(p.flaeche_m2)} m² Fläche{p.verschnitt_proz ? ` + ${zahl(p.verschnitt_proz)} % Verschnitt` : ""}{p.menge_stk ? ` · ca. ${zahl(p.menge_stk, 0)} Stück` : ""}{p.rabatt_proz ? ` · ${zahl(p.rabatt_proz)} % Rabatt` : ""}</div></td>
+          <td><b>{p.sku}</b> {p.bezeichnung}<div style={{ color: "#666", fontSize: 11.5 }}>{p.format ? `Format ${p.format}${formatMass(p) ? ` (${formatMass(p)})` : ""} · ` : ""}{zahl(p.flaeche_m2)} m² Fläche{p.verschnitt_proz ? ` + ${zahl(p.verschnitt_proz)} % Verschnitt` : ""}{p.menge_stk ? ` · ca. ${zahl(p.menge_stk, 0)} Stück` : ""}{p.rabatt_proz ? ` · ${zahl(p.rabatt_proz)} % Rabatt` : ""}</div></td>
           <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{zahl(p.menge_m2)} m²</td>
           <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{euro(p.ep_netto_m2)}</td>
           <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{euro(positionNetto(p))}</td>

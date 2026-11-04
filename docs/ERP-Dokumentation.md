@@ -84,12 +84,13 @@ Browser (React)  ──HTTPS──>  Server (Node, TypeScript)
                                   PostgreSQL 16  +  Dateiablage für Datenblätter
 ```
 
-### Datenmodell (implementiert: `db/migrations/0001_grundschema.sql`)
+### Datenmodell (implementiert: `db/migrations/0001_grundschema.sql`, `0002_stein_format.sql`)
 
 | Tabelle | Inhalt | Wichtige Regeln |
 |---|---|---|
 | `stein` | Der Klinker selbst: HBR-Code, Hersteller, Herstellungsart, Maße, technische Werte, Herstellertext | HBR-Code eindeutig, Form `HBR 00-000`; Werte nur positiv; Frost F0–F2; Versionszähler |
 | `stein_farbe` | Farben je Stein, Position 0 = Hauptfarbe | nur bekannte Farben |
+| `stein_format` (ab 0002) | Werte je Stein und Format: Maße, Gewicht, Druckfestigkeit, Wasseraufnahme, Frost, Bedarf, Artikelnr. Hersteller | nur Eingetragenes; leere Maße = Normmaß aus `format`; Maß-/Technikspalten in `stein` veraltet |
 | `produkt` | Was im Shop steht: Verblender, Riemchen, Dämm-, Nistklinker; SKU, Woo-ID, Status, Texte | SKU eindeutig, Riemchen enden auf „ R“; je Stein höchstens ein Verblender und ein Riemchen; „freigegeben“ nur mit SKU |
 | `produkt_format` | Formate je Produkt | nur bekannte Formate |
 | `bild`, `produkt_bild`, `referenz_bild` | Bilddateien einmalig, Alt-Text an der Datei; Zuordnung mit Reihenfolge | Woo-Medien-ID eindeutig |
@@ -150,6 +151,26 @@ Module der Testversion: Dashboard (Kennzahlen, „Wo ansetzen“, Hersteller, St
 
 Fachregeln, die die Testversion durchsetzt: Hersteller ist optional (Empfehlung, keine Pflicht); Referenzen nur mit Stein, Bild und Rubrik freigeben; Freigabe nur ohne Pflichtlücken; Steindaten gelten für Verblender und Riemchen gemeinsam; Herstellerwechsel zieht beide Produkte mit; Produkte mit Shop-ID werden archiviert statt gelöscht; Preise werden mit Gültigkeitsdatum ergänzt, nicht überschrieben; Angebote sind ab „Gesendet“ gesperrt; Statuswechsel nur entlang der festgelegten Folge (Neu → In Bearbeitung → Angebot erstellt → Gesendet → Angenommen/Abgelehnt → Archiviert).
 
+### Formate als Varianten eines Steins (ab v0.6.0)
+
+Anlass: Termin mit dem Kunden am 03.11.2026 – derselbe Klinker (z. B. HBR 10-100) wird in mehreren Formaten geführt (NF, DF, 2DF …); je Format unterscheiden sich Maße, Druckfestigkeit und Wasseraufnahme.
+
+**Entscheidung (umkehrbar):** Ein Stein bleibt ein Datensatz mit einer HBR-Nummer; Verblender und Riemchen bleiben je ein Produkt. Die Formate sind Varianten mit eigenen Werten (`Stein.format_daten` bzw. Tabelle `stein_format`). Am Produkt wird gewählt, welche Formate angeboten werden. Keine eigene HBR-Nummer je Format, weil Hersteller, Farbe, Oberfläche, Bilder, Texte und Referenzen gleich sind und sonst mehrfach gepflegt würden.
+
+| Wert | gilt für | Herkunft, wenn leer |
+|---|---|---|
+| Hersteller, Herstellungsart, Farben, Oberfläche, Herstellertext | Stein (alle Formate) | – |
+| Länge, Breite, Höhe | Stein + Format | Normmaß aus den Stammdaten (Formate) |
+| Druckfestigkeit, Wasseraufnahme, Frost, Gewicht, Artikelnr. Hersteller | Stein + Format | – (Prüfpunkt „empfohlen“) |
+| Bedarf je m² | Stein + Format | berechnet: 1 m² ÷ ((L + Stoßfuge) × (H + Lagerfuge)), Fugen 10/12 mm einstellbar |
+| Riemchenstärke, Eckriemchen | Produkt (Riemchen) | – |
+| VK/EK | Produkt, optional je Format | allgemeiner Preis des Produkts |
+| Format im Angebot | Position | bei nur einem Format automatisch; sonst Pflicht vor dem Versand |
+
+**Normmaße:** DF 240×115×52, NF 240×115×71, 2DF 240×115×113 (DIN-Formate); WF 210×100×50, WDF 210×100×65 (Waalformate); RF 250×120×65 (Reichsformat). Übliche, herstellerabhängige Maße: LDF 290×90×52, XLDF 365×115×52. Ohne einheitliches Maß: LF, ModF, Modul, BDF, BDF-XL, BS – Maße aus dem Datenblatt am Stein oder einmal in den Stammdaten festlegen. Quellen: [hausjournal.net – Klinkermaße](https://www.hausjournal.net/klinker-masse), [Röben – Klinkerformate und Schichtmaße](https://www.roeben.com/en/clinker-formats-and-layer-dimensions), [Röben XLDF-Produktseite](https://en.roben.pl/facade/facade-products/polish-clinker-bricks/melbourne-xldf-red-smooth), [Baunetz Wissen – Modulformat](https://www.baunetzwissen.de/drucken/modulformat-4768202). Bitte vom Kunden bestätigen lassen, insbesondere LDF/XLDF und die Bedeutung von BDF, BS und Modul im eigenen Sortiment.
+
+**Offen beim Kunden:** Gibt es Preise je Format (dann je Format pflegen)? Sollen Formate im Shop als Varianten (variables Produkt mit Attribut „Format“) erscheinen oder weiter als Kategorie? Braucht jedes Format eine eigene Artikelnummer im Shop (z. B. „HBR 10-100 NF“)?
+
 ### Anfrage → Angebot (Testversion ab v0.4.0)
 
 Ziel des Kunden: Angebot in 10 Minuten statt 5–6 Tagen, immer mit menschlicher Prüfung.
@@ -196,7 +217,7 @@ Voraussetzungen vom Kunden/Christian: Beispiel-E-Mails der Wunschliste (2–3 ec
 | Art, Herstellungsart, Farben, Formate, Hersteller | ERP | ERP → Shop, zunächst als Kategorien (wie heute), später als Attribute/Marken | Woo-Kategorie-IDs in den Stammdaten | Unbekannte Kategorie → Auftrag stoppt mit Fehler |
 | Bilder, Reihenfolge, Alt-Text | ERP | ERP → Shop | Woo-Medien-ID | Alt-Text wird an der Mediendatei gesetzt |
 | Kurztext, Beschreibung, SEO | ERP | ERP → Shop | Woo-ID | SEO-Plugin im Shop noch zu klären |
-| Technische Daten | ERP | ERP → Shop (Darstellung noch festzulegen) | Woo-ID | – |
+| Technische Daten je Format | ERP | ERP → Shop, im Paket als `varianten` (Format, Maße, Technik, Bedarf); Darstellung im Shop noch festzulegen (Variante oder Tabelle) | Woo-ID + Formatkürzel | – |
 | Status | ERP | freigegeben → veröffentlicht, archiviert → Entwurf im Shop | Woo-ID | Löschen im Shop nur mit Einzelfreigabe |
 | Preise | ERP | **nie** in den Shop (Katalogmodus) | – | – |
 | Neue Shop-Einträge | Shop | Shop → ERP nur über Import „nur neue“ | Woo-ID | ERP-Daten werden nie überschrieben |
@@ -244,6 +265,7 @@ Stand 02.11.2026, lokal geprüft:
 | Datenblatt-PDF ohne KI (pdf.js 3.11.174 lokal statt cdnjs): alle 8 Werte erkannt, übernommen, als geprüft vermerkt | bestanden |
 | KI-Datenblatt mit nachgestellter API-Antwort: Anfrage enthält PDF als Dokument, JSON-Schema und Browser-Header; Werte geprüft, ins Formular übernommen, Nummer aus Herstellerpräfix, Datenblatt am Stein vermerkt | bestanden (echte Claude-API nicht aufgerufen) |
 | Hersteller ausblenden: betroffene Produkte im Shop-Paket ohne Herstellername; Referenz anlegen, freigeben, im Paket mit Kategorien | bestanden |
+| v0.6.0: 41 automatische Tests (neu: Normmaße und Bedarf, Prüfung je Format, Umstellung alter Stände, Format-CSV, Angebot mit Format und Formatpreis, KI-Varianten, Migration 0002 auf befüllter Datenbank). Browser-Durchlauf (37 Prüfpunkte): Formatblöcke mit Normmaß und berechnetem Bedarf, abweichende Länge, Prüfwerte auf alle Formate, Riemchen sieht dieselben Werte, Verlauf je Format, Textvorschlag mit Maßen, Preis je Format, Datenblatt ohne KI mit Formaterkennung und Formatwahl, LF in Stammdaten festlegen, Angebot mit Format aus neuer Anfrage und Preiswechsel DF/NF, Format-CSV Export/Rück-Import ohne Änderung, Handybreite 390 px ohne Querscrollen | bestanden, keine Fehler in der Konsole |
 | v0.5.1: Layoutprüfung aller 27 Seiten bei 1440, 820 und 390 px Breite (kein Element außerhalb des Bildschirms oder seiner Karte), dazu Menü, E-Mail-Dialog, E-Mail-Anfrage und Suche auf dem Handy | bestanden |
 | v0.5.0: Seitenleiste mehrere Bereiche offen (bleibt nach Neuladen), Preisstaffel und Mindermenge im Angebot, Vier-Augen-Freigabe (Ersteller gesperrt, zweite Person gibt frei), E-Mail-Vorlagen mit Platzhaltern und Vermerk beim Kontakt, Vorlagen bearbeiten | bestanden |
 | Anfrage aus E-Mail (nachgestellte KI-Antwort) → Kontakt angelegt, Entwurf mit Preisen und Fracht, Prüfliste sperrt Versand, Gewonnen erzeugt Aufgaben, Ziehen nach „Verloren“ fragt Grund ab, Kennzahlen, „Heute zu tun“, Datenqualität | bestanden |
@@ -285,8 +307,9 @@ Stand 02.11.2026, lokal geprüft:
 | 4 | Doppelte Codes HBR 12-122, 13-130, 17-121 R; ggf. 14-100/14-101 | Kunde |
 | 5 | Rollen und Einkaufspreis-Sicht je Person | Kunde |
 | 6 | Herstellungsart HBR 14-116 und 16-104 (Verblender und Riemchen widersprechen sich) | Kunde |
-| 7 | Zielmodell im Shop (Attribute, Marken, Referenzen) und SEO-Plugin | Christian / Kunde |
+| 7 | Zielmodell im Shop (Attribute, Marken, Referenzen, Formate als Varianten?) und SEO-Plugin | Christian / Kunde |
 | 8 | Budget und Termin | Christian / Kunde |
+| 9 | Normmaße bestätigen (v. a. LDF, XLDF; Bedeutung BDF, BS, Modul); Preise je Format ja/nein; Artikelnummer je Format im Shop | Kunde |
 
 ### Risiken
 

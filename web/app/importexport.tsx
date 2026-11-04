@@ -8,6 +8,7 @@ import { csvText } from "../lib/csv.ts";
 import { exportKandidaten, wooPaket, alsExportiertMarkieren } from "../lib/woo.ts";
 import { shopVergleichen, shopNeueUebernehmen, type ShopVergleich } from "../lib/shopabgleich.ts";
 import { herunterladen, dateiWaehlen } from "../lib/speicher.ts";
+import { formateCsv, formatImportPlanen, formatImportAusfuehren, type FormatImportPlan } from "../lib/formatcsv.ts";
 import { ART } from "../lib/modell.ts";
 import type { Bestand } from "../../src/import/bestand.ts";
 
@@ -22,6 +23,7 @@ export function ImportExport() {
   const [nurProbleme, setNurProbleme] = useState(true);
   const [paketIds, setPaketIds] = useState<{ p: number[]; r: number[] } | null>(null);
   const [shop, setShop] = useState<{ v: ShopVergleich; b: Bestand; name: string } | null>(null);
+  const [fplan, setFplan] = useState<{ plan: FormatImportPlan; name: string } | null>(null);
   const exp = exportKandidaten(d);
   const heute = new Date().toISOString().slice(0, 10);
 
@@ -44,6 +46,26 @@ export function ImportExport() {
       dd.aenderungen.push({ zeit: new Date().toISOString(), von, tabelle: "system", id: 0, aktion: "aendern", felder: null, text: `CSV-Import ${datei?.name}: ${r.geaendert} geändert, ${r.neu} neu` });
     });
     if (ok) { melde(`Import übernommen: ${r.geaendert} geändert, ${r.neu} neu.`); setPlan(null); setDatei(null); }
+  }
+
+  async function formatCsvWaehlen() {
+    const f = await dateiWaehlen(".csv,text/csv,.txt");
+    if (!f) return;
+    let text = await f.text();
+    if (text.includes("�")) text = new TextDecoder("windows-1252").decode(await f.arrayBuffer());
+    setFplan({ plan: formatImportPlanen(d, text), name: f.name });
+  }
+  async function formatUebernehmen() {
+    if (!fplan) return;
+    const n = fplan.plan.zeilen.filter((x) => x.aktion === "aendern").length;
+    if (n > 50 && !(await frage(`${n} Formate werden geändert. Fehlerhafte Zeilen werden übersprungen.`, "Großen Import übernehmen", "Übernehmen"))) return;
+    if (z.ordner === "erlaubt") await sichern(true, "vor-import");
+    let r = 0;
+    const ok = aendern((dd, von) => {
+      r = formatImportAusfuehren(dd, fplan.plan, von);
+      dd.aenderungen.push({ zeit: new Date().toISOString(), von, tabelle: "system", id: 0, aktion: "aendern", felder: null, text: `Format-CSV ${fplan.name}: ${r} Formate geändert` });
+    });
+    if (ok) { melde(`${r} Formate geändert.`); setFplan(null); }
   }
 
   const anzahlOffen = exp.offen.length + exp.referenzen.length;
@@ -83,18 +105,26 @@ export function ImportExport() {
 
   return <>
     <Seitenkopf titel="Import & Export" text="Produkte mit Excel bearbeiten, Shop-Paket erzeugen, neuen Shop-Stand einlesen." />
-    <div class="raster r3" style={{ marginBottom: 16 }}>
+    <div class="raster r4" style={{ marginBottom: 16 }}>
       <Karte titel="Produkte exportieren">
-        <p class="muted" style={{ marginTop: 0 }}>CSV für Excel (Semikolon, UTF-8). Stein-Angaben wie Hersteller oder Maße stehen bei Verblender und Riemchen jeweils mit drin.</p>
+        <p class="muted" style={{ marginTop: 0 }}>CSV für Excel (Semikolon, UTF-8). Stein-Angaben wie Hersteller oder Farben stehen bei Verblender und Riemchen jeweils mit drin. Maße und Technik je Format: eigene Datei rechts.</p>
         <div class="knopfreihe">
           <button class="btn dunkel" onClick={() => herunterladen(`produkte_${heute}.csv`, produkteCsv(d, d.produkte.filter((p) => p.status !== "archiviert")), "text/csv;charset=utf-8")}><Icon n="download" />Alle aktiven ({d.produkte.filter((p) => p.status !== "archiviert").length})</button>
-          <button class="btn" onClick={() => herunterladen(`produkte-vorlage.csv`, csvText(SPALTEN.map((s) => s.kopf), [["HBR 11-150", "Verblender", "", "Entwurf", "Vandersanden Klinker", "Handform", "rot, braun", "WDF", "besandet", 210, 100, 65, 2.1, 25, 6.5, "F2", 73, "", "", 38.5, 59.9, "01.12.2026", "", "", "", "", "", "", "", ""]]), "text/csv;charset=utf-8")}>Vorlage für neue Produkte</button>
+          <button class="btn" onClick={() => { const bsp: Record<string, unknown> = { sku: "HBR 11-150", art: "Verblender", status: "Entwurf", hersteller: "Vandersanden Klinker", herstellungsart: "Handform", farben: "rot, braun", formate: "WDF, WF", oberflaechen: "besandet", ek_m2: 38.5, vk_m2: 59.9, preis_gueltig_ab: "01.12.2026" };
+            herunterladen(`produkte-vorlage.csv`, csvText(SPALTEN.map((s) => s.kopf), [SPALTEN.map((s) => bsp[s.kopf] ?? "")]), "text/csv;charset=utf-8"); }}>Vorlage für neue Produkte</button>
         </div>
       </Karte>
       <Karte titel="Produkte importieren">
         <p class="muted" style={{ marginTop: 0 }}>Zuordnung über die Artikelnummer. Leere Zellen bleiben unverändert, <code>LEEREN</code> löscht einen Wert. Neue Preise erhalten das Datum aus „preis_gueltig_ab“.</p>
         <label class="check" style={{ marginBottom: 10 }}><input type="checkbox" checked={neueAnlegen} onChange={(e) => { const v = (e.target as HTMLInputElement).checked; setNeueAnlegen(v); if (datei) setPlan(produktImportPlanen(d, datei.text, { neueAnlegen: v })); }} /> Unbekannte Artikelnummern als neue Produkte anlegen</label>
         <button class="btn dunkel" disabled={z.nurLesen} onClick={csvWaehlen}><Icon n="upload" />CSV-Datei wählen…</button>
+      </Karte>
+      <Karte titel="Formate und Technik">
+        <p class="muted" style={{ marginTop: 0 }}>Eine Zeile je Stein und Format mit Maßen, Druckfestigkeit, Wasseraufnahme, Frost und Bedarf. Normmaße und berechneter Bedarf stehen mit drin und bleiben beim Rück-Import unverändert.</p>
+        <div class="knopfreihe">
+          <button class="btn dunkel" onClick={() => herunterladen(`formate_${heute}.csv`, formateCsv(d), "text/csv;charset=utf-8")}><Icon n="download" />Exportieren</button>
+          <button class="btn" disabled={z.nurLesen} onClick={formatCsvWaehlen}><Icon n="upload" />Importieren…</button>
+        </div>
       </Karte>
       <Karte titel="Neuer Shop-Stand">
         <p class="muted" style={{ marginTop: 0 }}>Bestandsdatei aus dem Lesezeichen „Bestand exportieren“. Übernimmt nur Produkte und Referenzen, die im ERP noch fehlen.</p>
@@ -129,6 +159,32 @@ export function ImportExport() {
             </td>
           </tr>)}
           {zeilen.length > 500 && <tr><td colSpan={4} class="muted">… {zeilen.length - 500} weitere Zeilen</td></tr>}</tbody>
+        </table>
+      </div>
+    </Karte>}
+
+    {fplan && <Karte titel={`Vorschau Formate: ${fplan.name}`} rechts={<>
+      <button class="btn" onClick={() => setFplan(null)}>Verwerfen</button>
+      <button class="btn primaer" disabled={!fplan.plan.zeilen.some((x) => x.aktion === "aendern") || z.nurLesen} onClick={formatUebernehmen}>{fplan.plan.zeilen.filter((x) => x.aktion === "aendern").length} Formate übernehmen</button>
+    </>} ohnePadding>
+      <div class="karte-inhalt" style={{ borderBottom: "1px solid var(--line)" }}>
+        {fplan.plan.fehlt.map((f) => <div class="hinweisbox bad">{f}</div>)}
+        <div class="knopfreihe">
+          <span class="marke dunkel">{fplan.plan.zeilen.filter((x) => x.aktion === "aendern").length} geändert</span>
+          <span class="marke">{fplan.plan.zeilen.filter((x) => x.aktion === "gleich").length} unverändert</span>
+          <span class="marke bad">{fplan.plan.zeilen.filter((x) => x.aktion === "fehler").length} mit Fehlern (werden übersprungen)</span>
+          {fplan.plan.unbekannteSpalten.length > 0 && <span class="muted klein">Ignorierte Spalten: {fplan.plan.unbekannteSpalten.join(", ")}</span>}
+        </div>
+      </div>
+      <div class="tabelle-wrap" style={{ maxHeight: "60vh" }}>
+        <table class="t">
+          <thead><tr><th>Zeile</th><th>Stein</th><th>Format</th><th>Details</th></tr></thead>
+          <tbody>{fplan.plan.zeilen.filter((x) => x.aktion !== "gleich").slice(0, 500).map((x) => <tr>
+            <td class="num faint">{x.nr}</td><td class="mono nowrap">{x.hbr_code || "–"}</td><td class="mono">{x.format || "–"}</td>
+            <td>{x.fehler.map((f) => <div style={{ color: "var(--bad)" }}>{f}</div>)}
+              {x.aenderungen.map((c) => <div class="klein"><b style={{ fontWeight: 500 }}>{c.label}:</b> <span class="diff-alt">{c.alt === null || c.alt === "" ? "–" : String(c.alt).replace(".", ",")}</span> → <span class="diff-neu">{c.neu === null || c.neu === "" ? "–" : String(c.neu).replace(".", ",")}</span></div>)}</td>
+          </tr>)}
+          {!fplan.plan.zeilen.some((x) => x.aktion !== "gleich") && <tr><td colSpan={4} class="leer">Keine Änderungen gegenüber dem ERP.</td></tr>}</tbody>
         </table>
       </div>
     </Karte>}

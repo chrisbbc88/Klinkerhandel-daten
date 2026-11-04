@@ -97,7 +97,8 @@ test("Produkt-CSV: Änderungen, Preise, neue Produkte und Fehler", () => {
   const plan = produktImportPlanen(d, csv);
   const [z1, z2, z3, z4, z5] = plan.zeilen;
   assert.equal(z1.aktion, "aendern");
-  assert.deepEqual(z1.aenderungen.map((a) => a.spalte).sort(), ["bedarf_stk_m2", "ek_m2", "farben", "vk_m2"].sort().filter((s) => z1.aenderungen.some((a) => a.spalte === s)));
+  assert.deepEqual(z1.aenderungen.map((a) => a.spalte).sort(), ["ek_m2", "farben", "vk_m2"].sort().filter((s) => z1.aenderungen.some((a) => a.spalte === s)));
+  assert.deepEqual(plan.unbekannteSpalten, ["bedarf_stk_m2"]); // Technik steht seit v0.6 je Format in der Format-CSV
   assert.equal(z2.aktion, "neu");
   assert.equal(z3.aktion, "fehler"); // doppelt in der Datei
   assert.equal(z4.aktion, "fehler"); // unbekannte Herstellungsart
@@ -107,7 +108,6 @@ test("Produkt-CSV: Änderungen, Preise, neue Produkte und Fehler", () => {
   const p2 = d.produkte.find((x) => x.id === p.id)!;
   assert.equal(aktuellerPreis(p2, "vk", "m2", "2026-11-02")!.betrag, 89.9);
   assert.equal(aktuellerPreis(p2, "vk", "m2", "2026-10-31"), null);
-  assert.equal(d.steine.find((s) => s.id === p.stein_id)!.bedarf_stk_m2, 48);
   if (geschwister) assert.equal(geschwister.stein_id, p.stein_id);
   const neu = d.produkte.find((x) => x.sku === "HBR 98-100 R")!;
   assert.equal(neu.art, "riemchen");
@@ -119,7 +119,7 @@ test("Produkt-CSV: widersprüchliche Steinwerte für Verblender und Riemchen wer
   const d = structuredClone(basis);
   const v = d.produkte.find((p) => p.art === "verblender" && d.produkte.some((r) => r.art === "riemchen" && r.stein_id === p.stein_id))!;
   const r = d.produkte.find((x) => x.art === "riemchen" && x.stein_id === v.stein_id)!;
-  const plan = produktImportPlanen(d, `sku;bedarf_stk_m2\n${v.sku};48\n${r.sku};64\n`);
+  const plan = produktImportPlanen(d, `sku;bezeichnung_hersteller\n${v.sku};Kolumba\n${r.sku};Kolumba Rot\n`);
   assert.equal(plan.zeilen[0].aktion, "aendern");
   assert.equal(plan.zeilen[1].aktion, "fehler");
 });
@@ -162,7 +162,7 @@ test("WooCommerce-Paket: nur geänderte, freigegebene Produkte", () => {
   assert.equal(exportKandidaten(d).offen.length, 1);
   alsExportiertMarkieren(d, [p.id], "Tobi");
   assert.equal(exportKandidaten(d).offen.length, 0);
-  aendere(d, "steine", p.stein_id!, { bedarf_stk_m2: 50 }, "Tobi", undefined, new Date(Date.now() + 1000).toISOString());
+  aendere(d, "steine", p.stein_id!, { format_daten: [{ format: p.formate[0], laenge_mm: null, breite_mm: null, hoehe_mm: null, gewicht_kg: null, druckfestigkeit_nmm2: 30, wasseraufnahme_proz: null, frostwiderstand: null, bedarf_stk_m2: null, artikelnr_hersteller: "", quelle: "manuell" }] }, "Tobi", undefined, new Date(Date.now() + 1000).toISOString());
   assert.ok(exportKandidaten(d).offen.some((k) => k.p.id === p.id));
 });
 
@@ -200,6 +200,11 @@ test("Hersteller-Sichtbarkeit: Standard, Ausnahme am Produkt, Export ohne Herste
   assert.equal(e.hersteller_anzeigen, false);
   assert.equal(e.hersteller, null);
   assert.ok(!JSON.stringify(e).includes(h.name));
+  // Varianten je Format im Paket (Version 3)
+  assert.equal(paket.version, 3);
+  assert.deepEqual(e.varianten.map((v: any) => v.format), p.formate);
+  const nfv = e.varianten.find((v: any) => v.format === "NF");
+  if (nfv) assert.deepEqual([nfv.laenge_mm, nfv.hoehe_mm, nfv.masse_normmass, nfv.bedarf_stk_m2], [240, 71, true, 48]);
   // Ausnahme am Produkt
   assert.equal(herstellerSichtbar({ ...p, hersteller_im_shop: "anzeigen" }, h), true);
   // Hersteller fehlt ist keine Pflicht mehr
@@ -231,24 +236,146 @@ test("KI-Datenblatt: Schema und Prüfung der Antwort", async () => {
   assert.deepEqual([...sc.required].sort(), Object.keys(sc.properties).sort()); // alle Felder Pflicht, keine optionalen
   const unions = Object.values(sc.properties).filter((p: any) => Array.isArray(p.type)).length;
   assert.ok(unions <= 16);
+  const vari = (x: object) => ({ format: "", laenge_mm: null, breite_mm: null, hoehe_mm: null, gewicht_kg: null, druckfestigkeit_nmm2: null, wasseraufnahme_proz: null, frostwiderstand: "", bedarf_stk_m2: null, artikelnr_hersteller: "", ...x });
   const roh = {
     art: "verblender", hersteller: "Vandersanden", bezeichnung_hersteller: "Kolumba", artikelnr_hersteller: "", herstellungsart: "handform",
-    farben: ["rot", "lila"], formate: ["WDF", "XYZ"], oberflaechen: ["besandet"], laenge_mm: 210, breite_mm: 100, hoehe_mm: 65, gewicht_kg: 2.1,
-    druckfestigkeit_nmm2: 25, wasseraufnahme_proz: 99, frostwiderstand: "F2", bedarf_stk_m2: 73, riemchen_staerke_mm: null,
-    herstellertext: "Ein Handformstein.", beschreibung_vorschlag: "Sachlicher Text.", belege: [{ feld: "laenge_mm", zitat: "210 x 100 x 65 mm" }], unsicher: "",
+    farben: ["rot", "lila"], formate: ["WDF", "XYZ"], oberflaechen: ["besandet"], riemchen_staerke_mm: null,
+    varianten: [
+      vari({ format: "WDF", laenge_mm: 210, breite_mm: 100, hoehe_mm: 65, gewicht_kg: 2.1, druckfestigkeit_nmm2: 25, wasseraufnahme_proz: 99, frostwiderstand: "F2", bedarf_stk_m2: 58 }),
+      vari({ format: "", laenge_mm: 240, breite_mm: 115, hoehe_mm: 71, druckfestigkeit_nmm2: 30, frostwiderstand: "F2" }), // Format aus den Maßen: NF
+      vari({ format: "", laenge_mm: 333, hoehe_mm: 44 }), // nicht zuordenbar
+    ],
+    herstellertext: "Ein Handformstein.", beschreibung_vorschlag: "Sachlicher Text.", belege: [{ feld: "WDF:laenge_mm", zitat: "210 x 100 x 65 mm" }], unsicher: "",
   } as any;
   const { liste, hinweise } = vorschlaege(roh, basis, OBERFLAECHEN);
   const v = Object.fromEntries(liste.map((x) => [x.feld, x.wert]));
   assert.equal(basis.hersteller.find((h) => h.id === v.hersteller_id)?.name, "Vandersanden Klinker");
   assert.deepEqual(v.farben, ["rot"]);          // unbekannte Farbe verworfen
-  assert.deepEqual(v.formate, ["WDF"]);         // unbekanntes Format verworfen
-  assert.equal(v.wasseraufnahme_proz, undefined); // unplausibel → nicht übernommen
+  assert.deepEqual(v.formate, ["WDF", "NF"]);   // unbekanntes Format verworfen, NF aus Maßen erkannt
+  assert.equal(v["fmt:WDF:wasseraufnahme_proz"], undefined); // unplausibel → nicht übernommen
+  assert.equal(v["fmt:NF:druckfestigkeit_nmm2"], 30);
   assert.ok(hinweise.some((h) => h.includes("Wasseraufnahme")));
-  assert.equal(liste.find((x) => x.feld === "laenge_mm")!.warnung, undefined);
-  assert.ok(liste.find((x) => x.feld === "druckfestigkeit_nmm2")!.warnung); // ohne Zitat
+  assert.ok(hinweise.some((h) => h.includes("ohne erkennbares Format")));
+  assert.equal(liste.find((x) => x.feld === "fmt:WDF:laenge_mm")!.warnung, undefined);
+  assert.ok(liste.find((x) => x.feld === "fmt:WDF:druckfestigkeit_nmm2")!.warnung); // ohne Zitat
   const patch = aufSteinAnwenden(basis.steine[0], liste);
   assert.equal(patch.hersteller_quelle, "datenblatt");
   assert.equal((patch as any).formate, undefined); // Formate gehören zum Produkt
+  const wdf = patch.format_daten!.find((x) => x.format === "WDF")!;
+  assert.equal(wdf.druckfestigkeit_nmm2, 25);
+  assert.equal(wdf.quelle, "datenblatt");
+  assert.equal(patch.format_daten!.find((x) => x.format === "NF")!.frostwiderstand, "F2");
+});
+
+test("Formate: Normmaße, berechneter Bedarf und eingetragene Werte je Format", async () => {
+  const { formatWerte, bedarfBerechnen, steinFormate, formatSetzen } = await import("../web/lib/formate.ts");
+  const d = structuredClone(basis);
+  assert.deepEqual(d.formate.find((f) => f.kuerzel === "DF")!.mm, [240, 115, 52]);
+  assert.equal(d.formate.find((f) => f.kuerzel === "LF")!.mm, null); // herstellerabhängig
+  const fugen = d.einstellungen.fugen;
+  assert.deepEqual(fugen, { stoss_mm: 10, lager_mm: 12 });
+  assert.equal(bedarfBerechnen(240, 71, fugen), 48);
+  assert.equal(bedarfBerechnen(210, 50, fugen), 73);
+  assert.equal(bedarfBerechnen(240, 113, fugen), 32);
+  const s = d.steine.find((x) => d.produkte.some((p) => p.stein_id === x.id && p.formate.includes("NF") && p.formate.includes("DF")))!;
+  const nf = formatWerte(d, s, "NF");
+  assert.deepEqual([nf.laenge_mm, nf.breite_mm, nf.hoehe_mm, nf.masse_quelle, nf.bedarf_stk_m2, nf.bedarf_quelle], [240, 115, 71, "norm", 48, "berechnet"]);
+  // Abweichendes Maß laut Datenblatt (Handform): nur Länge eingetragen, Rest bleibt Normmaß
+  s.format_daten = formatSetzen(s, "NF", { laenge_mm: 245, druckfestigkeit_nmm2: 40, quelle: "datenblatt" });
+  const nf2 = formatWerte(d, s, "NF");
+  assert.deepEqual([nf2.laenge_mm, nf2.hoehe_mm, nf2.masse_quelle, nf2.druckfestigkeit_nmm2], [245, 71, "eingetragen", 40]);
+  assert.equal(nf2.bedarf_stk_m2, Math.round(1e6 / (255 * 83)));
+  assert.equal(formatWerte(d, s, "DF").druckfestigkeit_nmm2, null); // Werte bleiben beim Format
+  const alle = steinFormate(d, s).map((w) => w.format);
+  assert.ok(alle.includes("NF") && alle.includes("DF"));
+  // Leeren entfernt den Datensatz
+  s.format_daten = formatSetzen(s, "NF", { laenge_mm: null, druckfestigkeit_nmm2: null });
+  assert.equal(s.format_daten.length, 0);
+});
+
+test("Formate: Prüfung je angebotenem Format", async () => {
+  const { pruefeStein } = await import("../web/lib/pruefung.ts");
+  const { formatSetzen } = await import("../web/lib/formate.ts");
+  const d = structuredClone(basis);
+  const p = d.produkte.find((x) => x.formate.includes("LF"))!;
+  const s = d.steine.find((x) => x.id === p.stein_id)!;
+  const masse = pruefeStein(s, d).find((x) => x.regel === "masse")!;
+  assert.ok(masse.text.includes("LF"));        // LF hat kein Normmaß
+  assert.ok(!masse.text.includes("NF"));
+  for (const f of new Set(d.produkte.filter((x) => x.stein_id === s.id).flatMap((x) => x.formate)))
+    s.format_daten = formatSetzen(s, f, { laenge_mm: 490, breite_mm: 90, hoehe_mm: 40, druckfestigkeit_nmm2: 30, wasseraufnahme_proz: 6, frostwiderstand: "F2" });
+  assert.equal(pruefeStein(s, d).filter((x) => x.regel === "masse" || x.regel === "technik").length, 0);
+});
+
+test("Formate: Migration alter Stände ordnet Steinwerte dem Format zu", async () => {
+  const { normalisieren } = await import("../web/lib/modell.ts");
+  const d = structuredClone(basis) as any;
+  d.schema = 1;
+  for (const f of d.formate) delete f.mm_art;
+  delete d.einstellungen.fugen;
+  const p = d.produkte.find((x: any) => x.formate.length === 2 && x.formate.includes("NF") && x.formate.includes("DF") && d.produkte.filter((y: any) => y.stein_id === x.stein_id).every((y: any) => y.formate.length === 2))!;
+  const s = d.steine.find((x: any) => x.id === p.stein_id);
+  delete s.format_daten;
+  Object.assign(s, { laenge_mm: 240, breite_mm: 115, hoehe_mm: 52, gewicht_kg: 1.9, druckfestigkeit_nmm2: 35, wasseraufnahme_proz: 7, frostwiderstand: "F2", bedarf_stk_m2: 64 });
+  const s2 = d.steine.find((x: any) => x.id !== s.id && d.produkte.some((y: any) => y.stein_id === x.id && y.formate.length > 1));
+  delete s2.format_daten;
+  Object.assign(s2, { laenge_mm: 230, breite_mm: null, hoehe_mm: 60, gewicht_kg: null, druckfestigkeit_nmm2: 20, wasseraufnahme_proz: null, frostwiderstand: null, bedarf_stk_m2: null });
+  const n = normalisieren(d);
+  assert.equal(n.schema, 2);
+  const neu = n.steine.find((x) => x.id === s.id)!;
+  assert.equal((neu as any).laenge_mm, undefined);
+  assert.deepEqual(neu.format_daten.map((x) => x.format), ["DF"]); // aus den Maßen erkannt
+  assert.equal(neu.format_daten[0].druckfestigkeit_nmm2, 35);
+  const neu2 = n.steine.find((x) => x.id === s2.id)!;
+  assert.ok(neu2.format_daten.length > 1 && neu2.format_daten.every((x) => x.quelle === "alt")); // nicht zuordenbar → prüfen
+  assert.deepEqual(n.einstellungen.fugen, { stoss_mm: 10, lager_mm: 12 });
+  assert.equal(n.formate.find((f) => f.kuerzel === "NF")!.mm_art, "norm");
+});
+
+test("Formate: Format-CSV exportiert Normwerte und übernimmt nur Abweichungen", async () => {
+  const { formateCsv, formatImportPlanen, formatImportAusfuehren } = await import("../web/lib/formatcsv.ts");
+  const d = structuredClone(basis);
+  const csv = formateCsv(d);
+  const plan0 = formatImportPlanen(d, csv);
+  assert.equal(plan0.zeilen.filter((z) => z.aktion !== "gleich").length, 0, JSON.stringify(plan0.zeilen.find((z) => z.aktion !== "gleich")));
+  const s = d.steine.find((x) => d.produkte.some((p) => p.stein_id === x.id && p.formate.includes("NF")))!;
+  const plan = formatImportPlanen(d, [
+    "hbr_code;format;laenge_mm;druckfestigkeit_nmm2;frost;bedarf_stk_m2",
+    `${s.hbr_code};NF;240;38;F2;48`,      // 240 und 48 = Normmaß/berechnet → keine Änderung
+    `${s.hbr_code};nf;;;F9;`,              // Frost ungültig, Format klein geschrieben
+    "HBR 99-999;NF;;;;",
+    `${s.hbr_code};XYZ;;;;`,
+  ].join("\n"));
+  const [a, b, c, e] = plan.zeilen;
+  assert.equal(a.aktion, "aendern");
+  assert.deepEqual(a.aenderungen.map((x) => x.feld).sort(), ["druckfestigkeit_nmm2", "frostwiderstand"]);
+  assert.equal(b.aktion, "fehler");
+  assert.equal(c.aktion, "fehler");
+  assert.equal(e.aktion, "fehler");
+  assert.equal(formatImportAusfuehren(d, plan, "Tobi"), 1);
+  const g = d.steine.find((x) => x.id === s.id)!.format_daten.find((x) => x.format === "NF")!;
+  assert.deepEqual([g.laenge_mm, g.druckfestigkeit_nmm2, g.frostwiderstand, g.bedarf_stk_m2], [null, 38, "F2", null]);
+});
+
+test("Angebot: Format der Position bestimmt Bedarf und Preis", async () => {
+  const { positionAusProdukt, positionFormat } = await import("../web/lib/angebot.ts");
+  const d = structuredClone(basis);
+  const p = d.produkte.find((x) => x.formate.includes("NF") && x.formate.includes("DF"))!;
+  p.preise = [
+    { id: 1, preisart: "vk", betrag: 80, einheit: "m2", gueltig_ab: "2026-01-01", quelle: "manuell", erfasst_von: "t", erfasst_am: T0 },
+    { id: 2, preisart: "vk", betrag: 92, einheit: "m2", gueltig_ab: "2026-01-01", quelle: "manuell", erfasst_von: "t", erfasst_am: T0, format: "DF" },
+  ];
+  const offen = positionAusProdukt(p, d, 10);
+  assert.equal(offen.format, "");               // mehrere Formate → muss gewählt werden
+  assert.equal(offen.menge_stk, null);
+  const nf = positionAusProdukt(p, d, 10, "NF");
+  assert.deepEqual([nf.bedarf_stk_m2, nf.ep_netto_m2, nf.menge_stk], [48, 80, Math.ceil(nf.menge_m2 * 48)]);
+  const df = positionFormat(nf, p, d, "DF");
+  assert.deepEqual([df.bedarf_stk_m2, df.ep_netto_m2], [63, 92]);
+  const hand = positionFormat({ ...nf, ep_netto_m2: 75 }, p, d, "DF"); // Preis von Hand geändert → bleibt
+  assert.equal(hand.ep_netto_m2, 75);
+  assert.equal(aktuellerPreis(p, "vk"), p.preise[0]);
+  assert.equal(aktuellerPreis(p, "vk", "m2", undefined, "WF"), p.preise[0]); // ohne Formatpreis gilt der allgemeine
 });
 
 test("Anfrage: Datenqualität erkennt Lücken und Fake-Verdacht", async () => {
@@ -280,7 +407,7 @@ test("Anfrage: Statuswechsel mit Prüfliste, Verlustgrund und Aufgaben", async (
   d.einstellungen.preise.vier_augen_ab = null; // hier ohne Vier-Augen-Regel
   const p = d.produkte[0];
   d.vorgaenge.push({ id: 7, version: 1, erstellt_am: "2026-11-02T08:00:00.000Z", geaendert_am: T0, geaendert_von: "Tobi", nummer: "AN-2026-TO-001", kontakt_id: null, status: "neu", datum: "2026-11-02",
-    quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 100), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
+    quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 100, p.formate[0]), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
   normalisieren(d);
   assert.equal(statusWechsel(d, 7, "gesendet", "Tobi").ok, false); // nicht vorgesehen von neu
   assert.ok(statusWechsel(d, 7, "angebot_erstellt", "Tobi", { jetzt: "2026-11-02T08:10:00.000Z" }).ok);
@@ -306,7 +433,7 @@ test("Anfrage aus E-Mail: Kontakt erkennen, Positionen zuordnen, Vorgang anlegen
   const roh = {
     kunde: { anrede: "Frau", vorname: "Anna", nachname: "Meier", firma: "", email: "anna.meier@web.de", telefon: "0172 1234567", strasse: "Hauptstr. 1", plz: "46414", ort: "Rhede", land: "" },
     lieferung: { strasse: "", plz: "", ort: "", zeitraum: "KW 14", abholung: false },
-    positionen: [{ artikel: "HBR 11 - 110", bezeichnung: "Riemchen", art: "riemchen", flaeche_m2: 80, menge_stk: null, eckriemchen: true },
+    positionen: [{ artikel: "HBR 11 - 110", bezeichnung: "Riemchen", art: "riemchen", format: "wf", flaeche_m2: 80, menge_stk: null, eckriemchen: true },
       { artikel: "", bezeichnung: "Fugenmörtel grau", art: "unbekannt", flaeche_m2: null, menge_stk: null, eckriemchen: null }],
     bauvorhaben: "Neubau EFH", nachricht: "Bitte Angebot", unsicher: "",
   } as any;
@@ -314,7 +441,11 @@ test("Anfrage aus E-Mail: Kontakt erkennen, Positionen zuordnen, Vorgang anlegen
   assert.equal(plan.kontakt.vorhanden, null);
   assert.equal(plan.positionen[0].sku, "HBR 11-110 R");
   assert.equal(plan.positionen[0].ep_netto_m2, 49.9);
+  assert.equal(plan.positionen[0].format, "WF");          // Format aus der Anfrage
+  assert.equal(plan.positionen[0].bedarf_stk_m2, 73);     // WF 210×50 bei Fugen 10/12 mm
   assert.equal(plan.positionen[1].gefunden, false);
+  const ohne = anfragePlanen(d, { ...roh, positionen: [{ ...roh.positionen[0], format: "" }] });
+  assert.ok(ohne.hinweise.some((h) => h.includes("Format bitte wählen")));
   assert.equal(plan.fracht!.betrag, 0);
   assert.equal(plan.lieferung.ort, "Rhede");
   const id = anfrageAnlegen(d, plan, roh, "wunschliste", "Text", "Assistenz");
@@ -345,7 +476,7 @@ test("Preisregeln: Staffel, Mindermenge, Handrabatt bleibt, Vier-Augen", async (
   assert.equal(gross.positionen[0].rabatt_proz, 2); assert.equal(gross.positionen[1].rabatt_proz, 7); assert.equal(gross.mindermenge_netto, 0);
   // Vier-Augen ab 5.000 € netto
   d.vorgaenge.push({ id: 8, version: 1, erstellt_am: T0, geaendert_am: T0, geaendert_von: "Tobi", nummer: "AN-2026-TO-002", kontakt_id: null, status: "neu", datum: "2026-11-02",
-    quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 200), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
+    quelle: "email", lieferort_plz: "46414", lieferort_ort: "Rhede", wunschtermin: "", betreff: "", positionen: [{ ...positionAusProdukt(p, d, 200, p.formate[0]), ep_netto_m2: 50 }], fracht_netto: 0, notiz: "", angebot_am: null } as any);
   normalisieren(d);
   const v = () => d.vorgaenge.find((x) => x.id === 8)!;
   assert.ok(vierAugenNoetig(v(), d));

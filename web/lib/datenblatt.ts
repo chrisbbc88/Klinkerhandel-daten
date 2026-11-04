@@ -1,6 +1,5 @@
 // Werte aus dem Text eines Hersteller-Datenblatts erkennen (Mustererkennung, keine KI).
 // Jeder Vorschlag muss vom Bearbeiter bestätigt werden. Ohne Browser-Abhängigkeiten.
-import type { Stein } from "./modell.ts";
 
 export type DatenblattFeld = "laenge_mm" | "breite_mm" | "hoehe_mm" | "druckfestigkeit_nmm2" | "wasseraufnahme_proz" | "frostwiderstand" | "gewicht_kg" | "bedarf_stk_m2";
 export interface Vorschlag { feld: DatenblattFeld; label: string; wert: number | string; fundstelle: string }
@@ -44,12 +43,4 @@ export function erkenneWerte(roh: string): Vorschlag[] {
     if (wert >= 10 && wert <= 200) add("bedarf_stk_m2", wert, m);
   }
   return out;
-}
-
-export interface Abgleich extends Vorschlag { aktuell: unknown; gleich: boolean }
-export function abgleichen(s: Stein, v: Vorschlag[]): Abgleich[] {
-  return v.map((x) => {
-    const aktuell = (s as any)[x.feld] ?? null;
-    return { ...x, aktuell, gleich: aktuell !== null && String(aktuell) === String(x.wert) };
-  });
 }

@@ -53,6 +53,7 @@ export interface Plan {
 }
 
 // Stammdaten, die nicht aus dem Shop kommen (Normmaße nach DIN in mm).
+/** Normmaße: siehe web/lib/formate.ts (FORMAT_NORM). LDF/XLDF: übliche Maße, herstellerabhängig. */
 export const FORMATE: { kuerzel: string; name: string; mm: [number, number, number] | null }[] = [
   { kuerzel: "WF", name: "Waalformat", mm: [210, 100, 50] },
   { kuerzel: "WDF", name: "Waaldickformat", mm: [210, 100, 65] },
@@ -60,8 +61,8 @@ export const FORMATE: { kuerzel: string; name: string; mm: [number, number, numb
   { kuerzel: "DF", name: "Dünnformat", mm: [240, 115, 52] },
   { kuerzel: "2DF", name: "Doppeltes Dünnformat", mm: [240, 115, 113] },
   { kuerzel: "RF", name: "Reichsformat", mm: [250, 120, 65] },
-  { kuerzel: "LDF", name: "Langes Dünnformat", mm: null },
-  { kuerzel: "XLDF", name: "Extra langes Dünnformat", mm: null },
+  { kuerzel: "LDF", name: "Langes Dünnformat", mm: [290, 90, 52] },
+  { kuerzel: "XLDF", name: "Extra langes Dünnformat", mm: [365, 115, 52] },
   { kuerzel: "ModF", name: "Modulformat", mm: null },
   { kuerzel: "Modul", name: "Modul", mm: null },
   { kuerzel: "LF", name: "Langformat", mm: null },

@@ -3,12 +3,13 @@ import { useState } from "preact/hooks";
 import { z, aendern, melde } from "./store.ts";
 import { ab, herstellerName } from "./abgeleitet.ts";
 import { Seitenkopf, Karte, Feld, Auswahl, Zahl, Icon, queryParam, geheZu, Chips } from "./ui.tsx";
-import { SteinStamm, SteinTechnik, textVorschlag, HerstellerImShopFeld } from "./felder.tsx";
+import { SteinStamm, SteinTexte, FormatDaten, textVorschlag, HerstellerImShopFeld } from "./felder.tsx";
+import { formatWerte, masseText } from "../lib/formate.ts";
 import { HBR, ART, naechsterCode, steinLeer, skuFuer, produktName, heute, type Produkt, type ProduktArt, type Stein } from "../lib/modell.ts";
 import { pruefeStein, pruefeProdukt } from "../lib/pruefung.ts";
 import { lege_an, neueId, aendere } from "../lib/aendern.ts";
 import { KiDatenblatt, type GeladeneDatei } from "./ki.tsx";
-import type { KiVorschlag } from "../lib/ki.ts";
+import { aufSteinAnwenden, formatSchluesselLesen, type KiVorschlag } from "../lib/ki.ts";
 
 export function Erfassen() {
   const d = z.daten, a = ab();
@@ -36,13 +37,15 @@ export function Erfassen() {
     if (feld === "riemchen_staerke_mm") return staerke;
     if (feld === "beschreibung") return beschreibung;
     if (feld === "art") return art;
+    const k = formatSchluesselLesen(feld);
+    if (k) { const w = formatWerte(d, stein, k.format); return k.feld === "artikelnr_hersteller" ? w.artikelnr_hersteller || null : (w as any)[k.feld] ?? null; }
     return (stein as any)[feld] ?? null;
   }
   function ausDatenblatt(gewaehlt: KiVorschlag[], datei: GeladeneDatei) {
     let st: Stein = { ...stein };
     const uebernommen: string[] = [];
     for (const v of gewaehlt) {
-      if (v.ziel === "stein") { if (vorhanden) continue; (st as any)[v.feld] = v.wert; }
+      if (v.ziel === "stein" || v.ziel === "format") { if (vorhanden) continue; if (v.ziel === "stein") (st as any)[v.feld] = v.wert; }
       else if (v.feld === "formate") setFormate(v.wert as string[]);
       else if (v.feld === "riemchen_staerke_mm") setStaerke(v.wert as number);
       else if (v.feld === "beschreibung") setBeschreibung(v.wert as string);
@@ -57,7 +60,7 @@ export function Erfassen() {
         setPraefix(h.hbr_praefix); setCode(c); st.hbr_code = c;
       }
     }
-    if (!vorhanden && !st.laenge_mm) { const mm = d.formate.find((f) => f.kuerzel === (gewaehlt.find((v) => v.feld === "formate")?.wert as string[] | undefined)?.[0])?.mm; if (mm) { st.laenge_mm = mm[0]; st.breite_mm = mm[1]; st.hoehe_mm = mm[2]; } }
+    if (!vorhanden) { const fd = aufSteinAnwenden(st, gewaehlt.filter((v) => v.ziel === "format")).format_daten; if (fd) st.format_daten = fd; }
     setStein(st);
     setDatenblatt({ name: datei.name, sha: datei.sha, felder: uebernommen });
     melde(`${uebernommen.length} Werte ins Formular übernommen. Bitte prüfen und dann anlegen.`);
@@ -70,12 +73,6 @@ export function Erfassen() {
     const h = d.hersteller.find((x) => x.hbr_praefix === pr);
     setStein({ ...stein, hbr_code: c, hersteller_id: h?.id ?? stein.hersteller_id, hersteller_quelle: h ? "praefix" : stein.hersteller_quelle });
   }
-  function formateSetzen(f: string[]) {
-    setFormate(f);
-    const neu = f.find((x) => !formate.includes(x));
-    const mm = d.formate.find((x) => x.kuerzel === neu)?.mm;
-    if (mm && !stein.laenge_mm) setStein({ ...stein, laenge_mm: mm[0], breite_mm: mm[1], hoehe_mm: mm[2] });
-  }
 
   const codeFehler = vorhanden ? null : !HBR.test(code) ? "Format: HBR 12-345" : d.steine.some((s) => s.hbr_code === code) ? "Diese Nummer ist bereits vergeben" : null;
   const vorschauP: Produkt = {
@@ -83,7 +80,7 @@ export function Erfassen() {
     hersteller_id: stein.hersteller_id, woo_id: null, woo_slug: "", status, formate, bilder: [], riemchen_staerke_mm: art === "riemchen" ? staerke : null, eckriemchen: null,
     kurztext: "", beschreibung, kurztext_shop_alt: "", preise: [], hersteller_im_shop: himshop, zuletzt_exportiert_version: null,
   };
-  const pruef = [...pruefeStein(stein), ...pruefeProdukt(vorschauP, d)].filter((x) => x.regel !== "bild" && x.regel !== "bilder3" && x.regel !== "alt");
+  const pruef = [...pruefeStein(stein, d, [vorschauP]), ...pruefeProdukt(vorschauP, d)].filter((x) => x.regel !== "bild" && x.regel !== "bilder3" && x.regel !== "alt");
   const doppeltArt = vorhanden && (a.geschwister.get(vorhanden.id) ?? []).some((p) => p.art === art);
 
   function anlegen() {
@@ -145,10 +142,14 @@ export function Erfassen() {
         {!vorhanden && <Karte titel="2 · Stein"><SteinStamm s={stein} set={(x) => setStein({ ...stein, ...x })} /></Karte>}
         <Karte titel={vorhanden ? "2 · Format" : "3 · Format und Technik"}>
           <div class="formular" style={{ marginBottom: vorhanden ? 0 : 16 }}>
-            <Feld label="Formate *" klasse="breit" hinweis="Beim ersten Format werden die Normmaße eingetragen, wenn noch keine Maße erfasst sind."><Chips alle={d.formate.map((f) => f.kuerzel)} gewaehlt={formate} setze={formateSetzen} /></Feld>
+            <Feld label="Formate *" klasse="breit" hinweis="Je Format gelten die Normmaße; abweichende Maße und Prüfwerte tragen Sie unten je Format ein."><Chips alle={d.formate.map((f) => f.kuerzel)} gewaehlt={formate} setze={setFormate} /></Feld>
             {(art === "riemchen" || auchRiemchen) && <Feld label="Riemchenstärke mm"><Zahl wert={staerke} setze={setStaerke} /></Feld>}
           </div>
-          {!vorhanden && <SteinTechnik s={stein} set={(x) => setStein({ ...stein, ...x })} />}
+          {!vorhanden && <>
+            <FormatDaten s={stein} set={(x) => setStein({ ...stein, ...x })} produkte={[vorschauP, ...(auchRiemchen && art === "verblender" ? [{ ...vorschauP, art: "riemchen" as const }] : [])]} />
+            <div style={{ marginTop: 14 }}><SteinTexte s={stein} set={(x) => setStein({ ...stein, ...x })} /></div>
+          </>}
+          {vorhanden && <p class="muted klein" style={{ margin: 0 }}>Maße und technische Werte je Format pflegen Sie nach dem Anlegen am Stein.</p>}
         </Karte>
         <Karte titel={`${vorhanden ? 3 : 4} · Text und Preis`}>
           <div class="formular">
@@ -166,7 +167,7 @@ export function Erfassen() {
           <dl class="dl">
             <dt>Hersteller</dt><dd>{herstellerName(stein.hersteller_id) || "–"}</dd>
             <dt>Farben</dt><dd>{stein.farben.join(", ") || "–"}</dd>
-            <dt>Format</dt><dd>{formate.join(", ") || "–"}{stein.laenge_mm ? ` · ${stein.laenge_mm}×${stein.breite_mm}×${stein.hoehe_mm} mm` : ""}</dd>
+            <dt>Format</dt><dd>{formate.length ? formate.map((f) => <div>{f}{masseText(formatWerte(d, stein, f), art === "riemchen" ? staerke : undefined) ? ` · ${masseText(formatWerte(d, stein, f), art === "riemchen" ? staerke : undefined)}` : ""}</div>) : "–"}</dd>
           </dl>
         </Karte>
         <Karte titel="Noch offen">

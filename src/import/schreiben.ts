@@ -43,8 +43,9 @@ export async function planSchreiben(db: Db, plan: Plan, modus: Modus, quelle: st
         [f.schluessel, f.woo_kategorie_id, i]);
     for (const f of plan.formate)
       await tx.query(
-        "INSERT INTO format (kuerzel, name, laenge_mm, breite_mm, hoehe_mm, woo_kategorie_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
-        [f.kuerzel, f.name, f.mm?.[0] ?? null, f.mm?.[1] ?? null, f.mm?.[2] ?? null, f.woo_kategorie_id]);
+        "INSERT INTO format (kuerzel, name, laenge_mm, breite_mm, hoehe_mm, woo_kategorie_id, mm_art) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",
+        [f.kuerzel, f.name, f.mm?.[0] ?? null, f.mm?.[1] ?? null, f.mm?.[2] ?? null, f.woo_kategorie_id,
+          f.mm ? (["LDF", "XLDF"].includes(f.kuerzel) ? "ueblich" : "norm") : null]);
 
     const herstellerId = new Map((await tx.query<{ id: string; name: string }>("SELECT id, name FROM hersteller")).map((r) => [r.name, Number(r.id)]));
 

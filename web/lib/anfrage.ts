@@ -75,6 +75,8 @@ export function statusWechsel(d: Daten, id: number, neu: VorgangStatus, von: str
     const offen = PRUEFSCHRITTE.filter(([k]) => !v.pruefung[k]).map(([, t]) => t);
     if (offen.length) return { ok: false, fehler: `Vor dem Versand bitte prüfen: ${offen.join(", ")}.` };
     if (v.positionen.some((p) => !p.ep_netto_m2 || !p.menge_m2)) return { ok: false, fehler: "Mindestens eine Position hat keinen Preis oder keine Menge." };
+    const ohneFormat = v.positionen.filter((p) => { const pr = p.produkt_id ? d.produkte.find((x) => x.id === p.produkt_id) : undefined; return pr && pr.formate.length > 1 && !p.format; });
+    if (ohneFormat.length) return { ok: false, fehler: `Bitte das Format wählen bei: ${ohneFormat.map((p) => p.sku).join(", ")}.` };
     if (vierAugenNoetig(v, d) && !v.freigabe) return { ok: false, fehler: `Ab ${d.einstellungen.preise.vier_augen_ab} € netto muss eine zweite Person das Angebot freigeben (Vier-Augen-Prinzip).` };
   }
   if (neu === "abgelehnt" && !opt.verlustgrund) return { ok: false, fehler: "Bitte einen Grund angeben." };
@@ -126,7 +128,7 @@ export function pipelineKennzahlen(d: Daten, jetzt = Date.now()) {
 export interface AnfrageRoh {
   kunde: { anrede: string; vorname: string; nachname: string; firma: string; email: string; telefon: string; strasse: string; plz: string; ort: string; land: string };
   lieferung: { strasse: string; plz: string; ort: string; zeitraum: string; abholung: boolean };
-  positionen: { artikel: string; bezeichnung: string; art: "verblender" | "riemchen" | "daemmklinker" | "unbekannt"; flaeche_m2: number | null; menge_stk: number | null; eckriemchen: boolean | null }[];
+  positionen: { artikel: string; bezeichnung: string; art: "verblender" | "riemchen" | "daemmklinker" | "unbekannt"; format?: string; flaeche_m2: number | null; menge_stk: number | null; eckriemchen: boolean | null }[];
   bauvorhaben: string; nachricht: string; unsicher: string;
 }
 const s = { type: "string" };
@@ -137,9 +139,9 @@ export const ANFRAGE_SCHEMA = {
       required: ["anrede", "vorname", "nachname", "firma", "email", "telefon", "strasse", "plz", "ort", "land"] },
     lieferung: { type: "object", additionalProperties: false, properties: { strasse: s, plz: s, ort: s, zeitraum: s, abholung: { type: "boolean" } }, required: ["strasse", "plz", "ort", "zeitraum", "abholung"] },
     positionen: { type: "array", items: { type: "object", additionalProperties: false, properties: {
-      artikel: s, bezeichnung: s, art: { type: "string", enum: ["verblender", "riemchen", "daemmklinker", "unbekannt"] },
+      artikel: s, bezeichnung: s, art: { type: "string", enum: ["verblender", "riemchen", "daemmklinker", "unbekannt"] }, format: s,
       flaeche_m2: { type: ["number", "null"] }, menge_stk: { type: ["number", "null"] }, eckriemchen: { type: ["boolean", "null"] } },
-      required: ["artikel", "bezeichnung", "art", "flaeche_m2", "menge_stk", "eckriemchen"] } },
+      required: ["artikel", "bezeichnung", "art", "format", "flaeche_m2", "menge_stk", "eckriemchen"] } },
     bauvorhaben: s, nachricht: s, unsicher: s,
   },
   required: ["kunde", "lieferung", "positionen", "bauvorhaben", "nachricht", "unsicher"],
@@ -149,6 +151,7 @@ export const ANFRAGE_ANWEISUNG = [
   "- Übernimm nur, was in der Nachricht steht. Fehlendes als leeren Text, null oder leere Liste. Nichts erfinden.",
   "- artikel: die HBR-Nummer genau wie angegeben (z. B. „HBR 11-110“ oder „HBR 11-110 R“), sonst leer. bezeichnung: Produktname aus der Nachricht.",
   "- art: riemchen, wenn Riemchen gemeint sind (oder Nummer endet auf R), sonst verblender/daemmklinker; unklar = unbekannt.",
+  "- format: Steinformat, wenn genannt (z. B. NF, DF, 2DF, WF, WDF, LDF, XLDF, RF), als Kürzel; sonst leer.",
   "- flaeche_m2: Fläche in Quadratmetern, wenn genannt; menge_stk: Stückzahl, wenn genannt.",
   "- lieferung: Lieferadresse, falls abweichend angegeben; sonst leer. zeitraum: gewünschter Liefertermin/-zeitraum wörtlich. abholung: true nur bei ausdrücklicher Selbstabholung.",
   "- telefon wie angegeben; land leer, wenn nicht genannt.",
@@ -204,10 +207,13 @@ export function anfragePlanen(d: Daten, r: AnfrageRoh): AnfragePlan {
     let code = x.artikel.toUpperCase().replace(/\s+/g, " ").replace(/^HBR\s*(\d{2})\s*[-–]\s*(\d{3})/, "HBR $1-$2").trim();
     if (x.art === "riemchen" && /^HBR \d{2}-\d{3}$/.test(code)) code += " R";
     const p: Produkt | undefined = nachSku.get(code);
-    let pos: Position = p ? positionAusProdukt(p, d, x.flaeche_m2 ?? 0)
+    const fmt = x.format ? d.formate.find((f) => f.kuerzel.toLowerCase() === x.format!.trim().toLowerCase())?.kuerzel ?? "" : "";
+    let pos: Position = p ? positionAusProdukt(p, d, x.flaeche_m2 ?? 0, fmt)
       : positionRechnen({ produkt_id: null, sku: code, bezeichnung: x.bezeichnung || x.artikel || "Artikel laut Anfrage", flaeche_m2: x.flaeche_m2 ?? 0, verschnitt_proz: d.einstellungen.angebot.verschnitt_proz, bedarf_stk_m2: null, menge_m2: 0, menge_stk: null, ep_netto_m2: 0, rabatt_proz: 0 });
     if (!x.flaeche_m2 && x.menge_stk && pos.bedarf_stk_m2) { pos = positionRechnen({ ...pos, flaeche_m2: Math.round((x.menge_stk / pos.bedarf_stk_m2) * 100) / 100, verschnitt_proz: 0 }); hinweise.push(`${code || pos.bezeichnung}: Fläche aus ${x.menge_stk} Stück berechnet.`); }
     if (x.eckriemchen) pos = { ...pos, bezeichnung: pos.bezeichnung + " (inkl. Eckriemchen angefragt)" };
+    if (p && fmt && !p.formate.includes(fmt)) hinweise.push(`${p.sku}: Format ${fmt} angefragt, das Produkt führt aber nur ${p.formate.join(", ") || "kein Format"}.`);
+    else if (p && !pos.format && p.formate.length > 1) hinweise.push(`${p.sku}: Format bitte wählen (${p.formate.join(", ")}) – davon hängen Stückzahl und Preis ab.`);
     if (!p) hinweise.push(`„${x.artikel || x.bezeichnung}“ nicht im Bestand gefunden – Position ohne Preis angelegt.`);
     else if (!pos.ep_netto_m2) hinweise.push(`${p.sku}: kein Verkaufspreis je m² hinterlegt.`);
     if (!pos.flaeche_m2) hinweise.push(`${pos.sku || pos.bezeichnung}: keine Fläche angegeben.`);

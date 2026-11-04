@@ -3,8 +3,9 @@ import { useEffect, useState } from "preact/hooks";
 import { z, melde } from "./store.ts";
 import { Karte, Icon } from "./ui.tsx";
 import { pdfjs } from "./datenblatt.tsx";
-import { kiAuslesen, vorschlaege, medienTyp, KiFehler, type KiVorschlag } from "../lib/ki.ts";
-import { erkenneWerte, FELD_LABEL } from "../lib/datenblatt.ts";
+import { kiAuslesen, vorschlaege, medienTyp, KiFehler, formatSchluessel, type KiVorschlag } from "../lib/ki.ts";
+import { formatAusMassen, FORMAT_FELD_LABEL } from "../lib/formate.ts";
+import { erkenneWerte } from "../lib/datenblatt.ts";
 import { OBERFLAECHEN } from "../lib/modell.ts";
 import { dateiWaehlen, sha256, dateiSchreiben, kiSchluesselLesen } from "../lib/speicher.ts";
 
@@ -26,10 +27,12 @@ async function pdfText(b: Blob): Promise<string> {
  * Datenblatt-Assistent. onUebernehmen bekommt die bestätigten Vorschläge und die Datei.
  * aktuell: liefert den aktuellen Wert eines Felds (für den Vergleich „Im ERP“).
  */
-export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText }: {
+export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText, formate }: {
   titel: string; knopfText: string;
   onUebernehmen: (gewaehlt: KiVorschlag[], datei: GeladeneDatei) => void;
   aktuell?: (feld: string) => unknown;
+  /** Formate des Steins – für die Zuordnung der Werte bei der Textsuche ohne KI */
+  formate?: () => string[];
 }) {
   const [datei, setDatei] = useState<GeladeneDatei | null>(null);
   const [schluessel, setSchluessel] = useState<string | undefined>();
@@ -48,7 +51,7 @@ export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText }: {
     const sha = await sha256(f);
     await dateiSchreiben(sha, f).catch(() => {});
     setDatei({ name: f.name, sha, blob: f, url: URL.createObjectURL(f) });
-    setErgebnis(null); setFehler(null);
+    setErgebnis(null); setFehler(null); setTextWerte(null);
   }
 
   function setzeErgebnis(liste: KiVorschlag[], hinweise: string[], quelle: "ki" | "text", kosten?: string) {
@@ -72,6 +75,18 @@ export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText }: {
     setLaeuft("");
   }
 
+  const [textWerte, setTextWerte] = useState<ReturnType<typeof erkenneWerte> | null>(null);
+  const [textFormat, setTextFormat] = useState("");
+  /** Ergebnis der Textsuche für ein Format anzeigen. Ohne erkennbares Format wählt der Bearbeiter es aus. */
+  function textAnzeigen(werte: ReturnType<typeof erkenneWerte>, fmt: string, kandidaten = formate?.() ?? []) {
+    setTextFormat(fmt);
+    const hinweise: string[] = [];
+    if (!fmt) hinweise.push("Format nicht erkennbar – bitte oben wählen, für welches Format die Werte gelten.");
+    else if (kandidaten.length && !kandidaten.includes(fmt)) hinweise.push(`Die Maße passen zu ${fmt}; dieses Format ist beim Produkt noch nicht gewählt.`);
+    const liste: KiVorschlag[] = fmt ? werte.map((v) => ({ feld: formatSchluessel(fmt, v.feld), label: `${fmt} · ${FORMAT_FELD_LABEL[v.feld]}`, ziel: "format", format: fmt, wert: v.wert, anzeige: String(v.wert).replace(".", ","), beleg: v.fundstelle })) : [];
+    setzeErgebnis(liste, [...hinweise, ...(werte.length ? ["Textsuche ohne KI: nur Maße und technische Werte eines Formats. Hersteller, Farben und Texte bitte selbst ergänzen."] : ["Keine bekannten Werte im Text gefunden."])], "text");
+  }
+
   async function ohneKi() {
     if (!datei) return;
     if (medienTyp(datei.blob, datei.name) !== "application/pdf") { setFehler("Ohne KI können nur PDFs mit Text gelesen werden. Fotos bitte mit KI auslesen oder Werte abtippen."); return; }
@@ -79,8 +94,14 @@ export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText }: {
     try {
       const t = await pdfText(datei.blob);
       if (!t.trim()) { setFehler("Im PDF ist kein Text enthalten (eingescannt). Bitte mit KI auslesen oder Werte abtippen."); setLaeuft(""); return; }
-      const liste: KiVorschlag[] = erkenneWerte(t).map((v) => ({ feld: v.feld, label: FELD_LABEL[v.feld], ziel: "stein", wert: v.wert, anzeige: String(v.wert).replace(".", ","), beleg: v.fundstelle }));
-      setzeErgebnis(liste, liste.length ? ["Textsuche ohne KI: nur Maße und technische Werte. Hersteller, Farben und Texte bitte selbst ergänzen."] : ["Keine bekannten Werte im Text gefunden."], "text");
+      const werte = erkenneWerte(t);
+      // Format bestimmen: aus den gefundenen Maßen (auch wenn das Format am Produkt noch fehlt), sonst einziges Format des Steins
+      const kandidaten = formate?.() ?? [];
+      const l = werte.find((v) => v.feld === "laenge_mm")?.wert as number | undefined, b = werte.find((v) => v.feld === "breite_mm")?.wert as number | undefined, h = werte.find((v) => v.feld === "hoehe_mm")?.wert as number | undefined;
+      const ausMassen = l && h ? formatAusMassen(z.daten, l, b ?? null, h, kandidaten.length ? kandidaten : undefined) ?? formatAusMassen(z.daten, l, b ?? null, h) : null;
+      const fmt = ausMassen ?? (kandidaten.length === 1 ? kandidaten[0] : "");
+      setTextWerte(werte);
+      textAnzeigen(werte, fmt, kandidaten);
     } catch (e) { setFehler((e as Error).message); }
     setLaeuft("");
   }
@@ -100,6 +121,10 @@ export function KiDatenblatt({ titel, onUebernehmen, aktuell, knopfText }: {
         <p class="muted klein" style={{ margin: "6px 0 0" }}>{datei.name}</p>
       </div>
       {ergebnis && <div>
+        {ergebnis.quelle === "text" && textWerte && textWerte.length > 0 && <label class="feld" style={{ marginBottom: 8, maxWidth: 260 }}><span>Werte gelten für Format</span>
+          <select value={textFormat} onChange={(e) => textAnzeigen(textWerte, (e.target as HTMLSelectElement).value)}>
+            <option value="">– wählen –</option>{z.daten.formate.map((f) => <option value={f.kuerzel}>{f.kuerzel} – {f.name}</option>)}
+          </select></label>}
         <table class="t">
           <thead><tr><th></th><th>Feld</th><th>Aus dem Datenblatt</th>{aktuell && <th>Bisher</th>}</tr></thead>
           <tbody>{ergebnis.liste.map((v) => {

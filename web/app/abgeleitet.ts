@@ -20,10 +20,8 @@ export function ab(): Abgeleitet {
   const bilder = new Map(d.bilder.map((b) => [b.id, b]));
   const bewertung = new Map<number, ProduktBewertung>();
   const geschwister = new Map<number, Produkt[]>();
-  for (const p of d.produkte) {
-    bewertung.set(p.id, bewerte(p, d, { steine, bilder }));
-    if (p.stein_id) { const l = geschwister.get(p.stein_id) ?? []; l.push(p); geschwister.set(p.stein_id, l); }
-  }
+  for (const p of d.produkte) if (p.stein_id) { const l = geschwister.get(p.stein_id) ?? []; l.push(p); geschwister.set(p.stein_id, l); }
+  for (const p of d.produkte) bewertung.set(p.id, bewerte(p, d, { steine, bilder, jeStein: geschwister }));
   cache = {
     rev: z.rev, daten: z.daten, steine, bilder, bewertung, geschwister,
     hersteller: new Map(d.hersteller.map((h) => [h.id, h])),
@@ -45,9 +43,21 @@ const FELD_LABEL: Record<string, string> = {
   hersteller_id: "Hersteller", herstellungsart: "Herstellungsart", farben: "Farben", formate: "Formate", oberflaechen: "Oberflächen", laenge_mm: "Länge", breite_mm: "Breite", hoehe_mm: "Höhe",
   gewicht_kg: "Gewicht", druckfestigkeit_nmm2: "Druckfestigkeit", wasseraufnahme_proz: "Wasseraufnahme", frostwiderstand: "Frost", bedarf_stk_m2: "Bedarf/m²", preise: "Preise",
   beschreibung: "Beschreibung", kurztext: "Kurztext", status: "Status", name: "Name", sku: "Artikelnummer", bilder: "Bilder", alt: "Alt-Text", datenblaetter: "Datenblatt",
-  riemchen_staerke_mm: "Riemchenstärke", eckriemchen: "Eckriemchen", positionen: "Positionen", hersteller_quelle: "Herstellerquelle", aktivitaeten: "Aktivitäten", stein_id: "Stein",
+  riemchen_staerke_mm: "Riemchenstärke", eckriemchen: "Eckriemchen", format_daten: "Formate/Technik", positionen: "Positionen", hersteller_quelle: "Herstellerquelle", aktivitaeten: "Aktivitäten", stein_id: "Stein",
 };
 export const feldLabel = (f: string) => FELD_LABEL[f] ?? f;
+
+/** Änderungen an Formatwerten lesbar: „NF Druckfestigkeit: – → 40“. */
+export function formatDiff(alt: unknown, neu: unknown): { feld: string; alt: unknown; neu: unknown }[] {
+  const a = new Map(((alt as any[]) ?? []).map((x) => [x.format, x])), n = new Map(((neu as any[]) ?? []).map((x) => [x.format, x]));
+  const out: { feld: string; alt: unknown; neu: unknown }[] = [];
+  for (const f of new Set([...a.keys(), ...n.keys()]))
+    for (const k of ["laenge_mm", "breite_mm", "hoehe_mm", "gewicht_kg", "druckfestigkeit_nmm2", "wasseraufnahme_proz", "frostwiderstand", "bedarf_stk_m2", "artikelnr_hersteller"]) {
+      const x = a.get(f)?.[k] ?? null, y = n.get(f)?.[k] ?? null;
+      if ((x ?? "") !== (y ?? "")) out.push({ feld: `${f} ${FELD_LABEL[k] ?? k}`, alt: x, neu: y });
+    }
+  return out;
+}
 
 export function datensatzName(tabelle: string, id: number | string): string {
   const a = ab();

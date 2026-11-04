@@ -1,12 +1,13 @@
 // Produktdetail: Daten, Bilder, Preise, Datenblatt-Abgleich, Hinweise, Verlauf.
 import { useState, useMemo } from "preact/hooks";
 import { z, aendern, frage, melde, ich } from "./store.ts";
-import { ab, herstellerName, feldLabel, aenderungZeile } from "./abgeleitet.ts";
+import { ab, herstellerName, feldLabel, aenderungZeile, formatDiff } from "./abgeleitet.ts";
 import { Seitenkopf, Karte, Icon, Feld, Zahl, Auswahl, Score, geheZu, datum, datumZeit, relZeit, Text, initialen } from "./ui.tsx";
-import { SteinStamm, SteinTechnik, ProduktStamm, textVorschlag } from "./felder.tsx";
+import { SteinStamm, SteinTexte, FormatDaten, ProduktStamm, textVorschlag } from "./felder.tsx";
 import { GepruefteDatenblaetter } from "./datenblatt.tsx";
 import { KiDatenblatt, type GeladeneDatei } from "./ki.tsx";
-import { aufSteinAnwenden, type KiVorschlag } from "../lib/ki.ts";
+import { aufSteinAnwenden, formatSchluesselLesen, type KiVorschlag } from "../lib/ki.ts";
+import { formatWerte, steinFormate } from "../lib/formate.ts";
 import { ReferenzenZumStein } from "./referenzen.tsx";
 import { ART, STATUS, aktuellerPreis, heute, type Produkt, type Stein, type Preis } from "../lib/modell.ts";
 import { pruefeProdukt, pruefeStein } from "../lib/pruefung.ts";
@@ -41,7 +42,8 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
   const setS = (x: Partial<Stein>) => setPatch({ ...patch, s: { ...patch.s, ...x } });
   const neuLaden = () => setPatch({ p: {}, s: {}, pv: p.version, sv: s?.version });
 
-  const pruef = [...(entwurf.s ? pruefeStein(entwurf.s) : []), ...pruefeProdukt(entwurf.p, d)];
+  const steinProdukte = [entwurf.p, ...geschwister];
+  const pruef = [...(entwurf.s ? pruefeStein(entwurf.s, d, steinProdukte) : []), ...pruefeProdukt(entwurf.p, d)];
   const pflicht = pruef.filter((x) => x.schwere === "pflicht");
   const score = a.bewertung.get(p.id)!.score;
 
@@ -117,8 +119,9 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
         </Karte>
         {entwurf.s && <Karte titel={<h2>Stein {s!.hbr_code}</h2>} rechts={geschwister.length ? <span class="marke info">gilt auch für {geschwister.map((g) => g.sku).join(", ")}</span> : undefined}>
           <SteinStamm s={entwurf.s} set={setS} />
-          <h3 style={{ margin: "18px 0 10px" }}>Technische Daten</h3>
-          <SteinTechnik s={entwurf.s} set={setS} />
+          <h3 style={{ margin: "18px 0 10px" }}>Formate und technische Daten</h3>
+          <FormatDaten s={entwurf.s} set={setS} produkte={steinProdukte} />
+          <div style={{ marginTop: 14 }}><SteinTexte s={entwurf.s} set={setS} /></div>
         </Karte>}
         <div class="karte" style={{ position: "sticky", bottom: 0, padding: "10px 16px", display: "flex", gap: 8, alignItems: "center", boxShadow: geaendert ? "0 -6px 20px rgba(0,0,0,.06)" : undefined }}>
           <span class="muted klein">{geaendert ? "Ungespeicherte Änderungen" : "Alles gespeichert"}</span>
@@ -137,6 +140,7 @@ function Detail({ p, reiter }: { p: Produkt; reiter: Reiter }) {
           <dl class="dl">
             <dt>EK</dt><dd>{aktuellerPreis(p, "ek") ? euro(aktuellerPreis(p, "ek")!.betrag) : "–"}</dd>
             <dt>VK</dt><dd>{aktuellerPreis(p, "vk") ? euro(aktuellerPreis(p, "vk")!.betrag) : "–"}</dd>
+            {p.formate.filter((f) => p.preise.some((x) => x.format === f)).map((f) => <><dt>VK {f}</dt><dd>{aktuellerPreis(p, "vk", "m2", undefined, f) ? euro(aktuellerPreis(p, "vk", "m2", undefined, f)!.betrag) : "–"}</dd></>)}
           </dl>
         </Karte>
         {s && <ReferenzenZumStein steinId={s.id} />}
@@ -213,11 +217,12 @@ function Preise({ p }: { p: Produkt }) {
   const [ab_, setAb] = useState(heute());
   const [quelle, setQuelle] = useState<Preis["quelle"]>("manuell");
   const [aufschlag, setAufschlag] = useState<number | null>(null);
-  const ek = aktuellerPreis(p, "ek"), vk = aktuellerPreis(p, "vk");
+  const [format, setFormat] = useState("");
+  const ek = aktuellerPreis(p, "ek", "m2", undefined, format || null), vk = aktuellerPreis(p, "vk", "m2", undefined, format || null);
   const EINHEIT = { m2: "m²", stk: "Stück", pal: "Palette" };
   function hinzu() {
     if (!betrag || betrag <= 0) { melde("Bitte einen Betrag größer 0 eingeben.", "fehler"); return; }
-    aendern((dd, von) => aendere(dd, "produkte", p.id, { preise: [...p.preise, { id: neueId(), preisart: art, betrag: Math.round(betrag * 100) / 100, einheit, gueltig_ab: ab_, quelle, erfasst_von: von, erfasst_am: new Date().toISOString() }] }, von), "Preis gespeichert.");
+    aendern((dd, von) => aendere(dd, "produkte", p.id, { preise: [...p.preise, { id: neueId(), preisart: art, betrag: Math.round(betrag * 100) / 100, einheit, gueltig_ab: ab_, quelle, erfasst_von: von, erfasst_am: new Date().toISOString(), ...(format ? { format } : {}) }] }, von), "Preis gespeichert.");
     setBetrag(null);
   }
   async function entfernen(x: Preis) {
@@ -228,12 +233,13 @@ function Preise({ p }: { p: Produkt }) {
   return <div class="raster r-2-1">
     <Karte titel="Preisverlauf" ohnePadding>
       <div class="tabelle-wrap"><table class="t">
-        <thead><tr><th>Art</th><th>Einheit</th><th class="num">Betrag netto</th><th>gültig ab</th><th>Quelle</th><th>erfasst</th><th></th></tr></thead>
+        <thead><tr><th>Art</th><th>Format</th><th>Einheit</th><th class="num">Betrag netto</th><th>gültig ab</th><th>Quelle</th><th>erfasst</th><th></th></tr></thead>
         <tbody>
           {[...p.preise].sort((x, y) => y.gueltig_ab.localeCompare(x.gueltig_ab) || y.erfasst_am.localeCompare(x.erfasst_am)).map((x) => {
-            const aktuell = aktuellerPreis(p, x.preisart, x.einheit)?.id === x.id;
+            const aktuell = (x.format ? aktuellerPreis(p, x.preisart, x.einheit, undefined, x.format) : aktuellerPreis(p, x.preisart, x.einheit))?.id === x.id;
             return <tr>
               <td><span class={`marke ${x.preisart === "vk" ? "dunkel" : ""}`}>{x.preisart.toUpperCase()}</span></td>
+              <td>{x.format ? <span class="mono">{x.format}</span> : <span class="muted">alle</span>}</td>
               <td>{EINHEIT[x.einheit]}</td>
               <td class="num">{euro(x.betrag)}</td>
               <td>{datum(x.gueltig_ab)} {x.gueltig_ab > h ? <span class="marke info">geplant</span> : aktuell ? <span class="marke ok">aktuell</span> : null}</td>
@@ -242,7 +248,7 @@ function Preise({ p }: { p: Produkt }) {
               <td><button class="btn klein link" onClick={() => entfernen(x)}>löschen</button></td>
             </tr>;
           })}
-          {!p.preise.length && <tr><td colSpan={7} class="leer">Noch keine Preise erfasst.</td></tr>}
+          {!p.preise.length && <tr><td colSpan={8} class="leer">Noch keine Preise erfasst.</td></tr>}
         </tbody>
       </table></div>
     </Karte>
@@ -254,6 +260,7 @@ function Preise({ p }: { p: Produkt }) {
           <Feld label="Betrag netto €"><Zahl wert={betrag} setze={setBetrag} /></Feld>
           <Feld label="gültig ab"><input type="date" value={ab_} onInput={(e) => setAb((e.target as HTMLInputElement).value)} /></Feld>
           <Feld label="Quelle"><Auswahl wert={quelle} setze={setQuelle} optionen={[["manuell", "manuell"], ["lieferant", "Preisliste Lieferant"]]} /></Feld>
+          {p.formate.length > 1 && <Feld label="Gilt für Format" hinweis="nur wenn der Preis je Format abweicht"><Auswahl wert={format} setze={setFormat} optionen={p.formate.map((f) => [f, f] as [string, string])} leer="alle Formate" /></Feld>}
         </div>
         {art === "vk" && ek && einheit === "m2" && <div class="knopfreihe" style={{ marginTop: 10 }}>
           <span class="muted klein">Aus EK {euro(ek.betrag)} mit Aufschlag</span>
@@ -262,7 +269,7 @@ function Preise({ p }: { p: Produkt }) {
         </div>}
         <button class="btn primaer" style={{ marginTop: 12 }} onClick={hinzu} disabled={z.nurLesen}>Preis speichern</button>
       </Karte>
-      {ek && vk && <Karte titel="Kalkulation je m²">
+      {ek && vk && <Karte titel={`Kalkulation je m²${format ? ` · ${format}` : ""}`}>
         <dl class="dl"><dt>EK</dt><dd>{euro(ek.betrag)}</dd><dt>VK</dt><dd>{euro(vk.betrag)}</dd>
           <dt>Rohertrag</dt><dd>{euro(vk.betrag - ek.betrag)}</dd>
           <dt>Aufschlag</dt><dd>{((vk.betrag / ek.betrag - 1) * 100).toFixed(1).replace(".", ",")} %</dd>
@@ -310,7 +317,7 @@ function Verlauf({ p, s }: { p: Produkt; s?: Stein }) {
           <td class="nowrap">{datumZeit(e.zeit)}</td>
           <td class="nowrap"><span class="wer" style={{ marginRight: 6 }}>{initialen(e.von)}</span>{e.von}</td>
           <td>{e.tabelle === "steine" ? "Stein" : "Produkt"} {e.aktion === "anlegen" ? "angelegt" : e.aktion === "loeschen" ? "gelöscht" : ""}</td>
-          <td>{e.felder ? Object.entries(e.felder).map(([f, [alt, neu]]) => <div><b style={{ fontWeight: 500 }}>{feldLabel(f)}:</b> <span class="diff-alt">{wert(alt)}</span> → <span class="diff-neu">{wert(neu)}</span></div>) : aenderungZeile(e).text}</td>
+          <td>{e.felder ? Object.entries(e.felder).flatMap(([f, [alt, neu]]) => f === "format_daten" ? formatDiff(alt, neu).map((x) => [x.feld, [x.alt, x.neu]] as [string, [unknown, unknown]]) : [[feldLabel(f), [alt, neu]] as [string, [unknown, unknown]]]).map(([f, [alt, neu]]) => <div><b style={{ fontWeight: 500 }}>{f}:</b> <span class="diff-alt">{wert(alt)}</span> → <span class="diff-neu">{wert(neu)}</span></div>) : aenderungZeile(e).text}</td>
         </tr>)}
         {!eintraege.length && <tr><td colSpan={4} class="leer">Seit der Übernahme nicht geändert.</td></tr>}
       </tbody>
@@ -321,7 +328,12 @@ function Verlauf({ p, s }: { p: Produkt; s?: Stein }) {
 
 
 function DatenblattReiter({ p, s }: { p: Produkt; s: Stein }) {
-  const aktuell = (feld: string): unknown => feld === "art" ? p.art : ["formate", "riemchen_staerke_mm", "beschreibung"].includes(feld) ? (p as any)[feld] : (s as any)[feld] ?? null;
+  const geschwister = z.daten.produkte.filter((x) => x.stein_id === s.id);
+  const aktuell = (feld: string): unknown => {
+    const k = formatSchluesselLesen(feld);
+    if (k) { const w = formatWerte(z.daten, s, k.format); return k.feld === "artikelnr_hersteller" ? w.artikelnr_hersteller || null : (w as any)[k.feld] ?? null; }
+    return feld === "art" ? p.art : ["formate", "riemchen_staerke_mm", "beschreibung"].includes(feld) ? (p as any)[feld] : (s as any)[feld] ?? null;
+  };
   function uebernehmen(gewaehlt: KiVorschlag[], datei: GeladeneDatei) {
     const steinPatch = aufSteinAnwenden(s, gewaehlt);
     const prodPatch: Partial<Produkt> = {};
@@ -334,8 +346,9 @@ function DatenblattReiter({ p, s }: { p: Produkt; s: Stein }) {
     }, felder.length ? `${felder.length} Werte übernommen, Datenblatt als geprüft vermerkt.` : "Datenblatt als geprüft vermerkt.");
   }
   return <div class="raster">
-    <KiDatenblatt titel={`Datenblatt abgleichen – Stein ${s.hbr_code}`} knopfText="Übernehmen und als geprüft vermerken" aktuell={aktuell} onUebernehmen={uebernehmen} />
-    <p class="muted klein" style={{ margin: 0 }}>Werte am Stein gelten für Verblender und Riemchen gemeinsam. Formate und Beschreibung werden nur bei diesem Produkt ({p.sku}) gesetzt.</p>
+    <KiDatenblatt titel={`Datenblatt abgleichen – Stein ${s.hbr_code}`} knopfText="Übernehmen und als geprüft vermerken" aktuell={aktuell} onUebernehmen={uebernehmen}
+      formate={() => steinFormate(z.daten, s, geschwister).map((w) => w.format)} />
+    <p class="muted klein" style={{ margin: 0 }}>Werte am Stein und je Format gelten für Verblender und Riemchen gemeinsam. Die Formatauswahl und die Beschreibung werden nur bei diesem Produkt ({p.sku}) gesetzt.</p>
     <GepruefteDatenblaetter stein={s} />
   </div>;
 }
